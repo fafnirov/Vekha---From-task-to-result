@@ -1,0 +1,464 @@
+/* ---------------------------------------------------------------
+   Screen-specific patterns: dashboard tiles, board columns,
+   gantt rows, workflow canvas, charts.
+   --------------------------------------------------------------- */
+
+/* Dashboard KPI tile ---------------------------------------------- */
+
+.kpi {
+  border-radius: 9px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.kpi:hover {
+  border-color: var(--ac-soft2);
+  background: var(--ac-soft);
+}
+
+/* Board ------------------------------------------------------------ */
+
+.bcol {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 0;
+  transition: background 180ms ease, border-color 180ms ease,
+    width 200ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.bcol__head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 11px 8px;
+  flex: none;
+  border-radius: 10px 10px 0 0;
+  transition: background 180ms ease;
+}
+
+.bcol__folded {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  width: 100%;
+  padding: 2px 0;
+  color: var(--tx2);
+}
+
+.bcol__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.bcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 10px;
+  cursor: grab;
+  transition: box-shadow 170ms ease, transform 170ms ease, border-color 170ms ease;
+}
+
+.bcard:hover {
+  box-shadow: var(--sh2) !important;
+  transform: translateY(-1px) !important;
+  border-color: var(--border2);
+}
+
+.bcard:active {
+  cursor: grabbing;
+}
+
+.drop-line {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ac);
+  margin: -2px 0;
+  position: relative;
+}
+
+.drop-line::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ac);
+}
+
+.drop-zone {
+  min-height: 52px;
+  border: 1.5px dashed var(--ac);
+  border-radius: 9px;
+  background: var(--ac-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--ac-tx);
+  animation: vk-fade 140ms ease;
+  flex: none;
+}
+
+/* Task detail ------------------------------------------------------- */
+
+.detail-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 27px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.detail-row:hover {
+  background: var(--surface2);
+}
+
+.att {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.att:hover {
+  border-color: var(--ac);
+  box-shadow: var(--sh2);
+}
+
+.att__thumb {
+  height: 66px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface2) 0 7px,
+    var(--n-bg) 7px 14px
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.composer {
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.composer:focus-within {
+  border-color: var(--ac) !important;
+  box-shadow: var(--ring);
+}
+
+/* Backlog ------------------------------------------------------------ */
+
+.drag-row {
+  cursor: grab;
+  transition: background 140ms ease, opacity 140ms ease;
+}
+
+.drag-row:active {
+  cursor: grabbing;
+}
+
+/* Gantt --------------------------------------------------------------- */
+
+.gantt__track {
+  position: relative;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(10% - 1px),
+    var(--grid) calc(10% - 1px),
+    var(--grid) 10%
+  );
+}
+
+.gantt__bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  box-shadow: var(--sh1);
+  cursor: pointer;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+
+.gantt__bar:hover {
+  filter: brightness(1.06);
+  transform: translateY(-50%) scale(1.01);
+}
+
+.gantt__grip {
+  width: 3px;
+  height: 60%;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 2px;
+  cursor: col-resize;
+  flex: none;
+}
+
+.gantt__today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--dang);
+  opacity: 0.55;
+}
+
+/* Workflow canvas ------------------------------------------------------- */
+
+.wf-canvas {
+  position: relative;
+  height: 290px;
+  min-width: 640px;
+  background: radial-gradient(var(--grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+  border-radius: 8px;
+}
+
+.wf-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--tx);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--sh1);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.wf-node:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--sh2);
+}
+
+.wf-edge {
+  position: absolute;
+  background: var(--border2);
+  border-radius: 1px;
+}
+
+.wf-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.wf-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--sh2);
+}
+
+/* Charts ----------------------------------------------------------------- */
+
+.chart-bar {
+  width: 100%;
+  border-radius: 5px 5px 2px 2px;
+  transform-origin: bottom;
+  animation: vk-grow 480ms cubic-bezier(0.2, 0.8, 0.3, 1);
+  cursor: pointer;
+  transition: filter 150ms ease;
+}
+
+.chart-bar:hover {
+  filter: brightness(1.08);
+}
+
+.donut__hole {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Filters ----------------------------------------------------------------- */
+
+.filter-side {
+  padding: 14px 12px 30px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 100%;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--tx2);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background 150ms ease;
+}
+
+.filter-item:hover {
+  background: var(--surface2);
+}
+
+.filter-item--on {
+  background: var(--ac-soft);
+  color: var(--ac-tx);
+  font-weight: 600;
+}
+
+.jql {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  padding: 10px 11px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.jql:focus-within {
+  border-color: var(--ac);
+  box-shadow: var(--ring);
+}
+
+.jql .k {
+  color: var(--vio);
+}
+
+.jql .s {
+  color: var(--ok);
+}
+
+.jql .op {
+  color: var(--tx3);
+}
+
+/* Condition builder --------------------------------------------------------- */
+
+.cond {
+  display: grid;
+  grid-template-columns: 58px 150px 128px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.cond__join {
+  font-size: 11.5px;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.cond__pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 9px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--tx);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.cond__pick:hover {
+  border-color: var(--border2);
+}
+
+.cond__values {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  min-height: 30px;
+  padding: 3px 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+/* Responsive ---------------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .sticky-aside {
+    position: static;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 860px) {
+  :root {
+    --sbw: 56px;
+  }
+
+  .sidebar__name,
+  .sidebar__ver,
+  .nav__label,
+  .nav__count,
+  .nav__group,
+  .org__name,
+  .org__sub,
+  .sidebar__me {
+    display: none;
+  }
+
+  .searchbtn {
+    width: 44px;
+  }
+
+  .searchbtn span:nth-child(2),
+  .searchbtn .kbd {
+    display: none;
+  }
+}
