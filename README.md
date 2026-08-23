@@ -19,16 +19,15 @@ npm install
 ```
 
 ```bash
-npm run db:migrate
-```
-
-```bash
-npm run seed
+npm run setup
 ```
 
 ```bash
 npm run dev
 ```
+
+Первая команда ставит зависимости и создаёт `.env` со случайным
+`JWT_SECRET`, вторая применяет миграции и наполняет базу.
 
 Интерфейс поднимется на `http://localhost:5173`, API — на `http://localhost:4180`.
 

@@ -18,7 +18,8 @@
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json",
     "test": "node --test --import tsx server/**/*.test.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "node scripts/ensure-env.mjs && prisma generate",
+    "setup": "npm run db:deploy && npm run seed"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
