@@ -1,27 +1,37 @@
-/** Domain model for the Vekha tracker. */
+/**
+ * Доменная модель клиента. Типы повторяют то, что отдаёт API
+ * (см. server/lib/dto.ts): сервер уже приводит даты к подписям вида
+ * «28 авг» и подставляет переменные дизайн-системы, поэтому экранам
+ * остаётся только раскладка.
+ */
 
-export type StatusName =
-  | 'New'
-  | 'Open'
-  | 'In Progress'
-  | 'Review'
-  | 'Testing'
-  | 'Done'
-  | 'Blocked'
+/** Имена статусов задаются в настройках воркфлоу, поэтому это строка. */
+export type StatusName = string
+
+/** Категория статуса — она же определяет цвет и попадание в отчёты. */
+export type StatusCategory = 'todo' | 'inprogress' | 'done' | 'blocked'
 
 export type PriorityName = 'Critical' | 'High' | 'Medium' | 'Low'
+export type PriorityKey = 'critical' | 'high' | 'medium' | 'low'
 
-/** Short code used everywhere as an avatar/assignee reference. */
-export type PersonId = 'AK' | 'DS' | 'MN' | 'IV' | 'EL' | 'PG'
+/** Короткий код участника: им задача ссылается на человека. */
+export type PersonId = string
+
+export type AccessRole = 'admin' | 'manager' | 'member' | 'viewer'
 
 export interface Person {
-  id: PersonId
-  /** Two-letter monogram shown in avatars. */
+  id: string
+  code: PersonId
+  /** Монограмма для аватара. */
   who: string
   name: string
+  /** Должность. */
   role: string
+  accessRole: AccessRole
+  email: string
   bg: string
   fg: string
+  active: boolean
 }
 
 export interface StatusStyle {
@@ -37,111 +47,130 @@ export interface PriorityStyle {
   glyph: string
 }
 
-/** Deadline colouring: overdue, due today, or neutral. */
 export type DueState = 'over' | 'today' | undefined
 
 export interface Task {
+  id: string
   key: string
+  num: number
   title: string
+  description: string
   status: StatusName
+  statusId: string
+  statusCategory: StatusCategory
   priority: PriorityName
-  who: PersonId
+  priorityKey: PriorityKey
+  who: PersonId | null
+  assigneeId: string | null
+  authorCode: PersonId
+  authorId: string
   project: string
+  projectId: string | null
   queue: string
+  queueId: string
   sprint: string
+  sprintId: string | null
+  parentKey: string | null
   due: string
+  dueDate: string | null
+  dueState: DueState
   est: number
   tags: string[]
-  dueState?: DueState
+  rank: number
+  createdAt: string
+  updatedAt: string
+  closedAt: string | null
+  comments: number
+  attachments: number
+  subtasks: number
+}
+
+export interface TaskPage {
+  items: Task[]
+  total: number
+  page: number
+  perPage: number
+  pages: number
+}
+
+export interface TaskDetail {
+  task: Task
+  subtasks: Task[]
+  watchers: { id: string; code: PersonId; name: string }[]
+  links: {
+    id: string
+    type: string
+    label: string
+    direction: 'in' | 'out'
+    task: Task
+  }[]
+  attachments: {
+    id: string
+    filename: string
+    size: number
+    mime: string
+    by: PersonId
+    byName: string
+    url: string
+    createdAt: string
+  }[]
+  transitions: {
+    id: string
+    to: StatusName
+    category: StatusCategory
+    condition: string
+    role: string
+  }[]
+}
+
+export interface Queue {
+  id: string
+  key: string
+  name: string
+  owner: PersonId
+  ownerId: string
+  n: number
+  wf: string
+  workflowId: string
+  access: string
+  accessKey: string
+  accBg: string
+  accFg: string
 }
 
 export interface Project {
+  id: string
   name: string
   abbr: string
+  description: string
   bg: string
   fg: string
   done: number
   total: number
   pct: string
   due: string
+  dueDate: string | null
+  startDate: string | null
   lead: PersonId
+  leadId: string
   queue: string
+  queueId: string
   state: string
+  stateKey: string
   stBg: string
   stFg: string
-  /** Nearest upcoming milestone, shown on the dashboard card. */
   milestone: string
-  atRisk?: boolean
-}
-
-export interface Queue {
-  key: string
-  name: string
-  owner: PersonId
-  n: number
-  wf: string
-  access: string
-  accBg: string
-  accFg: string
-}
-
-export interface Team {
-  abbr: string
-  name: string
-  note: string
-  load: string
-  bg: string
-  fg: string
-  members: { id: PersonId; tasks: number }[]
-}
-
-export interface Transition {
-  from: StatusName
-  to: StatusName
-  cond: string
-  role: string
-}
-
-export interface TaskField {
-  id: string
-  label: string
-  type: string
-  icon: string
-  screen: string
-  req: boolean
-  card: boolean
-}
-
-export interface Permission {
-  id: string
-  label: string
-  cells: boolean[]
-}
-
-export interface AutomationRule {
-  id: string
-  name: string
-  trigger: string
-  cond: string
-  action: string
-  runs: string
-  icon: string
-  iconFg: string
-  on: boolean
-}
-
-export interface TaskTemplate {
-  name: string
-  icon: string
-  note: string
-  tags: string[]
+  atRisk: boolean
 }
 
 export interface Milestone {
+  id: string
   title: string
   note: string
   date: string
+  dateISO: string
   state: string
+  stateKey: string
   icon: string
   bg: string
   fg: string
@@ -150,16 +179,313 @@ export interface Milestone {
 
 export interface GanttRow {
   label: string
+  key?: string
   start: number
   dur: number
   pct: string
   c: string
   who: PersonId | ''
   dates: string
-  phase?: boolean
-  milestone?: boolean
-  dep?: boolean
   status?: StatusName
+  milestone?: boolean
+}
+
+export interface ProjectDetail {
+  project: Project
+  tasks: Task[]
+  milestones: Milestone[]
+  gantt: GanttRow[]
+  ganttHeader: string[]
+  risks: { title: string; note: string; level: 'high' | 'medium' | 'low' }[]
+}
+
+export interface Sprint {
+  id: string
+  name: string
+  queue: string
+  queueId: string
+  goal: string
+  state: 'planned' | 'active' | 'closed'
+  capacity: number
+  startDate: string
+  endDate: string
+  range: string
+  tasks: number
+  points: number
+  donePoints: number
+}
+
+export interface PlanningPerson extends Person {
+  points: number
+  done: number
+  capacity: number
+  overloaded: boolean
+  load: number
+}
+
+export interface Planning {
+  sprint: Sprint | null
+  sprintTasks: Task[]
+  backlog: Task[]
+  people: PlanningPerson[]
+  summary: {
+    planned: number
+    capacity: number
+    free: number
+    over: number
+    tasks: number
+    unassigned: number
+    unestimated: number
+  }
+  sprints: Sprint[]
+}
+
+export interface BoardColumn {
+  id: string
+  name: string
+  statuses: StatusName[]
+  wipLimit: number
+  keys: string[]
+}
+
+export interface Board {
+  columns: BoardColumn[]
+  tasks: Record<string, Task>
+}
+
+export interface Team {
+  id: string
+  name: string
+  abbr: string
+  note: string
+  bg: string
+  fg: string
+  tasks: number
+  load: string
+  members: (Person & { teamRole: string; tasks: number })[]
+}
+
+export interface Comment {
+  id: string
+  who: PersonId
+  authorId: string
+  time: string
+  createdAt: string
+  text: string
+  edited: boolean
+}
+
+export interface HistoryItem {
+  id: string
+  who: string
+  whoCode: PersonId | null
+  what: string
+  from?: string
+  to?: string
+  toBg?: string
+  toFg?: string
+  key: string
+  time: string
+  createdAt: string
+  kind: string
+  icon: string
+  bg: string
+  fg: string
+}
+
+export interface ActivityItem {
+  id: string
+  who: string
+  what: string
+  key: string
+  time: string
+  icon: string
+  bg: string
+  fg: string
+}
+
+export interface Notification {
+  id: string
+  who: PersonId | null
+  text: string
+  key: string
+  time: string
+  createdAt: string
+  unread: boolean
+  kind: string
+  kindKey: string
+  icon: string
+  icFg: string
+}
+
+export type AttentionKind =
+  | 'overdue'
+  | 'blocked'
+  | 'today'
+  | 'soon'
+  | 'mention'
+  | 'review'
+  | 'noassignee'
+
+export interface AttentionRow {
+  key: string
+  kind: AttentionKind
+  meta: string
+  task: Task
+}
+
+export interface Dashboard {
+  kpis: { label: string; value: number; note: string; fg: string; icon: string }[]
+  attention: AttentionRow[]
+  reasons: Record<
+    AttentionKind,
+    { reason: string; icon: string; bg: string; fg: string; bar: string }
+  >
+  myTasks: Task[]
+  projects: Project[]
+  sprint: (Sprint & { daysLeft: number }) | null
+  activity: ActivityItem[]
+  mentions: Notification[]
+}
+
+export interface Workflow {
+  id: string
+  name: string
+  queues: number
+  statuses: {
+    id: string
+    name: StatusName
+    category: StatusCategory
+    order: number
+    color: string
+  }[]
+  transitions: {
+    id: string
+    from: StatusName
+    to: StatusName
+    fromId: string
+    toId: string
+    cond: string
+    role: string
+    roleKey: string
+  }[]
+}
+
+export interface TaskField {
+  id: string
+  key: string
+  label: string
+  type: string
+  icon: string
+  screen: string
+  req: boolean
+  card: boolean
+  system: boolean
+}
+
+export interface PermissionMatrix {
+  roles: { key: AccessRole; label: string }[]
+  rows: { id: string; label: string; cells: boolean[] }[]
+}
+
+export interface AutomationRule {
+  id: string
+  name: string
+  trigger: string
+  triggerLabel: string
+  cond: string
+  action: string
+  condition: Record<string, unknown>
+  actions: Record<string, unknown>[]
+  queue: string | null
+  icon: string
+  iconFg: string
+  on: boolean
+  runs: string
+  runCount: number
+  lastRun: string | null
+}
+
+export interface TaskTemplate {
+  id: string
+  name: string
+  icon: string
+  note: string
+  body: string
+  queue: string | null
+  tags: string[]
+}
+
+export interface SavedFilter {
+  id: string
+  label: string
+  query: string
+  icon: string
+  icf: string
+  favorite: boolean
+  shared: boolean
+  mine: boolean
+  owner: PersonId
+  ownerName: string
+  n: number
+  error: string | null
+}
+
+export interface FilterLibrary {
+  favorites: SavedFilter[]
+  saved: SavedFilter[]
+  team: SavedFilter[]
+}
+
+export interface FilterFieldCatalog {
+  fields: { key: string; label: string; icon: string; values: string[] }[]
+  people: { code: PersonId; name: string }[]
+}
+
+export interface Reports {
+  kpis: { label: string; value: string; delta: string; fg: string; deltaFg: string }[]
+  statusSplit: { label: string; n: number; c: string }[]
+  throughput: { label: string; n: number; h: string }[]
+  workload: (Person & {
+    sp: number
+    tasks: number
+    doneW: string
+    progW: string
+    todoW: string
+  })[]
+  sprintMetrics: { label: string; plan: string; fact: string; pct: string; fg: string; state: string }[]
+  overdue: { key: string; title: string; late: string; days: number }[]
+}
+
+export interface Burndown {
+  sprint: string | null
+  total: number
+  remaining: number
+  points: { label: string; remaining: number; ideal: number }[]
+}
+
+export interface Org {
+  name: string
+  unit: string
+  mark: string
+  version: string
+}
+
+export interface SearchResult {
+  tasks: Task[]
+  projects: { id: string; name: string; abbr: string }[]
+  queues: { id: string; key: string; name: string }[]
+  people: { id: string; code: PersonId; name: string; initials: string; jobTitle: string }[]
+}
+
+export interface Invite {
+  id: string
+  email: string
+  role: AccessRole
+  token: string
+  expiresAt: string
+  createdBy?: string
+  expired?: boolean
 }
 
 export interface ToastItem {
@@ -170,22 +496,6 @@ export interface ToastItem {
 }
 
 export type ToastKind = 'ok' | 'info' | 'warn' | 'err'
-
-export interface FilterCondition {
-  field: string
-  op: string
-  icon: string
-  values: string[]
-  vbg: string
-  vfg: string
-}
-
-export interface SavedFilter {
-  label: string
-  n: number
-  icon: string
-  icf: string
-}
 
 export type ScreenId =
   | 'home'

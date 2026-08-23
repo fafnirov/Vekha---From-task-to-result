@@ -481,9 +481,22 @@ function describeCondition(raw: string): string {
     .join(parsed.any?.length ? ' или ' : ' и ')
 }
 
+/** Кому адресовано уведомление — человеческими словами. */
+const AUDIENCE_LABEL: Record<string, string> = {
+  admin: 'администраторов',
+  manager: 'лидов',
+  member: 'участников',
+  viewer: 'гостей',
+  assignee: 'исполнителя',
+  author: 'автора',
+  watchers: 'наблюдателей',
+}
+
 const ACTION_LABEL: Record<string, (value?: string, role?: string) => string> = {
-  notify: (value, role) => (role ? `Уведомить: ${role}` : (value ?? 'Уведомить')),
+  notify: (value, role) =>
+    role ? `Уведомить ${AUDIENCE_LABEL[role] ?? role}` : (value ?? 'Уведомить'),
   set_priority: (value) => `priority → ${value ?? 'High'}`,
+  raise_priority: (value) => `priority ↑ до ${value ?? 'High'}`,
   set_status: (value) => `status → ${value ?? 'Done'}`,
   set_assignee: (value) => `assignee → ${value ?? '—'}`,
   add_comment: () => 'Добавить комментарий',

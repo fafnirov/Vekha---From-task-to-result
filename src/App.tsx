@@ -4,6 +4,7 @@ import { TopBar } from './components/TopBar'
 import { Toasts } from './components/Toasts'
 import { SearchPalette } from './components/SearchPalette'
 import { CreateTaskModal } from './components/CreateTaskModal'
+import { Auth } from './screens/Auth'
 import { Home } from './screens/Home'
 import { Tasks } from './screens/Tasks'
 import { TaskDetail } from './screens/TaskDetail'
@@ -17,9 +18,26 @@ import { Filters } from './screens/Filters'
 import { Reports } from './screens/Reports'
 import { Workflow } from './screens/Workflow'
 import { useUi } from './store/ui'
+import { useSession } from './store/session'
 
 export function App() {
   const ui = useUi()
+  const { me, ready } = useSession()
+
+  // Пока проверяется сессия, экран остаётся пустым: мигание формой входа
+  // при каждом обновлении страницы выглядит как ошибка.
+  if (!ready) return <div className="boot" aria-busy="true" />
+
+  if (!me) {
+    return (
+      <>
+        <Routes>
+          <Route path="*" element={<Auth />} />
+        </Routes>
+        <Toasts />
+      </>
+    )
+  }
 
   return (
     <div className="shell">

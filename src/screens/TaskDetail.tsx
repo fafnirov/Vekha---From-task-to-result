@@ -1,916 +1,848 @@
-import { useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Avatar,
-  Checkbox,
+  Empty,
   Icon,
+  PriorityChip,
   Progress,
   StatusBadge,
+  Tag,
   TaskKey,
   UnderlineTabs,
 } from '../components/ui'
+import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, fileSize } from '../data/catalog'
+import { api, ApiError } from '../api/client'
 import {
-  PEOPLE,
-  ST,
-  STATUS_FLOW,
-  dueColor,
-  priorityStyle,
-  statusStyle,
-} from '../data/catalog'
-import { findTask } from '../data/tasks'
-import { BASE_COMMENTS, EVENT_HISTORY, TASK_HISTORY, type Comment } from '../data/feed'
-import type { PersonId, StatusName } from '../data/types'
+  useAddComment,
+  useApiMutation,
+  useComments,
+  useHistory,
+  useInvalidate,
+  useProjects,
+  useSprints,
+  useTask,
+  useUpdateTask,
+} from '../api/hooks'
+import { useSession } from '../store/session'
 import { useApp } from '../store/app'
+import type { PriorityName } from '../data/types'
 
-const TABS = [
+type TabId = 'comments' | 'history' | 'all'
+
+const TABS: { value: TabId; label: string }[] = [
   { value: 'comments', label: 'Комментарии' },
   { value: 'history', label: 'История' },
-  { value: 'all', label: 'Все события' },
-  { value: 'links', label: 'Связанные' },
-] as const
-
-type TabValue = (typeof TABS)[number]['value']
-
-const CHECKLIST = [
-  { id: 'c1', key: 'VEKHA-143', text: 'Карта разделов и правила группировки', who: 'AK' },
-  { id: 'c2', key: 'VEKHA-144', text: 'Макет полного состояния меню', who: 'MN' },
-  { id: 'c3', key: 'VEKHA-145', text: 'Свёрнутое состояние и поиск по разделам', who: 'MN' },
-  { id: 'c4', key: 'VEKHA-146', text: 'Правила видимости по ролям', who: 'PG' },
-] as const
-
-const ATTACHMENTS = [
-  { name: 'nav-map-v3.fig', size: '2.4 МБ', kind: 'FIGMA' },
-  { name: 'sidebar-states.png', size: '860 КБ', kind: 'PNG 1440×900' },
-  { name: 'research-notes.pdf', size: '340 КБ', kind: 'PDF · 6 стр.' },
+  { value: 'all', label: 'Всё' },
 ]
-
-const LINKED = [
-  { key: 'VEKHA-138', rel: 'блокирует' },
-  { key: 'VEKHA-129', rel: 'связана' },
-  { key: 'MOB-84', rel: 'дублирует' },
-]
-
-const RICH_TOOLS = [
-  { icon: 'format_bold', title: 'Жирный' },
-  { icon: 'format_italic', title: 'Курсив' },
-  { icon: 'format_h1', title: 'Заголовок', sep: true },
-  { icon: 'format_list_bulleted', title: 'Список' },
-  { icon: 'format_list_numbered', title: 'Нумерованный список' },
-  { icon: 'checklist', title: 'Чек-лист', sep: true },
-  { icon: 'code', title: 'Код' },
-  { icon: 'format_quote', title: 'Цитата' },
-  { icon: 'link', title: 'Ссылка' },
-  { icon: 'table', title: 'Таблица' },
-]
-
-const EDITOR_TOOLS = [
-  { icon: 'format_bold', title: 'Жирный' },
-  { icon: 'format_italic', title: 'Курсив' },
-  { icon: 'code', title: 'Код' },
-  { icon: 'alternate_email', title: 'Упоминание' },
-  { icon: 'attach_file', title: 'Вложение' },
-]
-
-const WATCHERS: PersonId[] = ['AK', 'DS', 'MN', 'PG']
 
 export function TaskDetail() {
-  const { key = 'VEKHA-142' } = useParams()
+  const { key = '' } = useParams()
   const nav = useNavigate()
-  const { statusOf, setStatus, checks, toggleCheck, toast } = useApp()
+  const { me, list: people, can } = useSession()
+  const { toast, toastError } = useApp()
+  const invalidate = useInvalidate()
 
-  const raw = findTask(key)
-  const status = statusOf(raw.key)
-  const st = statusStyle(status)
-  const pr = priorityStyle(raw.priority)
+  const detail = useTask(key)
+  const comments = useComments(key)
+  const history = useHistory(key)
+  const projects = useProjects()
+  const sprints = useSprints()
+  const update = useUpdateTask()
+  const addComment = useAddComment()
 
-  const [tab, setTab] = useState<TabValue>('comments')
-  const [statusMenu, setStatusMenu] = useState(false)
-  const [taskMenu, setTaskMenu] = useState(false)
-  const [editing, setEditing] = useState(false)
+  const [tab, setTab] = useState<TabId>('comments')
+  const [editingDescription, setEditingDescription] = useState(false)
   const [draft, setDraft] = useState('')
-  const [extra, setExtra] = useState<Comment[]>([])
+  const [commentText, setCommentText] = useState('')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [linkOpen, setLinkOpen] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const doneCount = CHECKLIST.filter((c) => checks[c.id]).length
-  const nextStatus: StatusName = useMemo(() => {
-    const i = STATUS_FLOW.indexOf(status)
-    return STATUS_FLOW[Math.min(STATUS_FLOW.length - 1, i < 0 ? 2 : i + 1)]
-  }, [status])
+  const task = detail.data?.task
 
-  const comments = [...BASE_COMMENTS, ...extra]
-  const history = tab === 'all' ? [...EVENT_HISTORY, ...TASK_HISTORY] : TASK_HISTORY
-
-  const addComment = () => {
-    const text = draft.trim()
-    if (!text) {
-      toast('Пустой комментарий', 'Введите текст перед отправкой', 'warn')
-      return
+  useEffect(() => {
+    if (task) {
+      setDraft(task.description)
+      setTitleDraft(task.title)
     }
-    setExtra([
-      ...extra,
-      { id: `n${extra.length}`, who: 'AK', time: 'только что', text, fresh: true },
-    ])
-    setDraft('')
-    toast('Комментарий добавлен', 'Уведомлены 4 наблюдателя')
+  }, [task?.id, task?.description, task?.title])
+
+  const watch = useApiMutation<void, { watching: boolean }>(
+    () => api.post(`/api/tasks/${encodeURIComponent(key)}/watch`),
+    ['tasks'],
+  )
+  const addLink = useApiMutation<{ target: string; type: string }, unknown>(
+    (body) => api.post(`/api/tasks/${encodeURIComponent(key)}/links`, body),
+    ['tasks'],
+  )
+  const dropLink = useApiMutation<string, unknown>((id) => api.del(`/api/links/${id}`), ['tasks'])
+  const dropAttachment = useApiMutation<string, unknown>(
+    (id) => api.del(`/api/attachments/${id}`),
+    ['tasks'],
+  )
+  const removeTask = useApiMutation<void, unknown>(
+    () => api.del(`/api/tasks/${encodeURIComponent(key)}`),
+    ['tasks', 'board', 'projects'],
+  )
+
+  const subtaskProgress = useMemo(() => {
+    const list = detail.data?.subtasks ?? []
+    if (list.length === 0) return null
+    const done = list.filter((s) => s.statusCategory === 'done').length
+    return { done, total: list.length, pct: `${Math.round((done / list.length) * 100)}%` }
+  }, [detail.data?.subtasks])
+
+  if (detail.isLoading) {
+    return (
+      <div className="page">
+        <div className="skel skel--block" style={{ height: 320 }} />
+      </div>
+    )
   }
 
-  const fieldGroups = [
-    {
-      title: 'Основное',
-      items: [
-        { label: 'Статус', kind: 'badge' as const, value: status, bg: st.bg, fg: st.fg },
-        {
-          label: 'Приоритет',
-          kind: 'badge' as const,
-          value: raw.priority,
-          bg: pr.bg,
-          fg: pr.fg,
-          icon: pr.icon,
-        },
-        {
-          label: 'Исполнитель',
-          kind: 'avatar' as const,
-          value: PEOPLE[raw.who].name,
-          who: raw.who,
-        },
-        { label: 'Автор', kind: 'avatar' as const, value: 'Анна Ковалёва', who: 'AK' as PersonId },
-      ],
-    },
-    {
-      title: 'Планирование',
-      items: [
-        { label: 'Очередь', kind: 'mono' as const, value: `${raw.queue} · Платформа` },
-        { label: 'Проект', kind: 'text' as const, value: raw.project },
-        { label: 'Спринт', kind: 'text' as const, value: raw.sprint },
-        {
-          label: 'Дедлайн',
-          kind: 'mono' as const,
-          value: raw.due,
-          fg: dueColor(raw.dueState),
-        },
-        { label: 'Оценка', kind: 'mono' as const, value: `${raw.est} SP` },
-        { label: 'Затрачено', kind: 'mono' as const, value: '3ч 40м' },
-      ],
-    },
-    {
-      title: 'Дополнительно',
-      items: [
-        { label: 'Компонент', kind: 'text' as const, value: 'Навигация' },
-        { label: 'Связи', kind: 'text' as const, value: 'блокирует 2 задачи' },
-        { label: 'Вложения', kind: 'text' as const, value: '3 файла' },
-      ],
-    },
-  ]
+  if (detail.isError || !task) {
+    return (
+      <div className="page">
+        <Empty
+          icon="search_off"
+          title="Задача не найдена"
+          text={`Задачи ${key} нет или у вас нет к ней доступа.`}
+          action={
+            <button type="button" className="btn btn--primary" onClick={() => nav('/tasks')}>
+              К списку задач
+            </button>
+          }
+        />
+      </div>
+    )
+  }
+
+  const data = detail.data!
+  const watching = data.watchers.some((w) => w.id === me?.id)
+  const editable = can('task.editForeign') || task.authorId === me?.id || task.assigneeId === me?.id
+
+  async function patch(body: Record<string, unknown>, note?: string) {
+    try {
+      await update.mutateAsync({ key, patch: body })
+      if (note) toast('Сохранено', note, 'ok')
+    } catch (err) {
+      // Отказ воркфлоу приходит как 422 — показываем причину дословно.
+      toastError(err, err instanceof ApiError && err.status === 422 ? 'Переход запрещён' : 'Не сохранилось')
+    }
+  }
+
+  async function uploadFile(file: File) {
+    try {
+      await api.upload(`/api/tasks/${encodeURIComponent(key)}/attachments`, file)
+      invalidate(['tasks'])
+      toast('Файл прикреплён', file.name, 'ok')
+    } catch (err) {
+      toastError(err, 'Файл не загрузился')
+    }
+  }
 
   return (
-    <div
-      className="split"
-      style={{
-        gridTemplateColumns: 'minmax(0,1fr) 296px',
-        minHeight: '100%',
-        gap: 0,
-      }}
-    >
-      <div style={{ padding: '16px 18px 32px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-          <button
-            type="button"
-            className="btn btn--icon btn--sm"
-            style={{ width: 26 }}
-            title="Назад к списку"
-            onClick={() => nav('/tasks')}
-          >
-            <Icon name="arrow_back" size={16} />
-          </button>
-          <span
-            className="mono"
-            style={{ fontSize: 12.5, color: 'var(--ac-tx)', fontWeight: 500 }}
-          >
-            {raw.key}
-          </span>
-          <span style={{ fontSize: 12, color: 'var(--tx3)' }}>·</span>
-          <span style={{ fontSize: 12, color: 'var(--tx3)' }}>
-            создана 12 августа · Анна Ковалёва
-          </span>
-          <div className="spacer" style={{ display: 'flex', gap: 6, position: 'relative' }}>
+    <div className="split" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px', minHeight: '100%', gap: 0 }}>
+      {/* ── Основная колонка ───────────────────────────────────────────── */}
+      <div style={{ padding: '14px 16px 40px', minWidth: 0 }}>
+        <div className="task__head">
+          <TaskKey>{task.key}</TaskKey>
+          {task.parentKey && (
+            <Link to={`/tasks/${task.parentKey}`} className="task__parent">
+              <Icon name="subdirectory_arrow_right" size={14} />
+              {task.parentKey}
+            </Link>
+          )}
+          <span className="spacer" style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
-              className="btn btn--secondary"
-              onClick={() => toast('Ссылка скопирована', `vekha.app/${raw.key}`)}
+              className={watching ? 'btn btn--secondary btn--on' : 'btn btn--secondary'}
+              onClick={() =>
+                void watch
+                  .mutateAsync()
+                  .then((r) => toast(r.watching ? 'Вы наблюдаете' : 'Наблюдение снято', task.key, 'info'))
+                  .catch(toastError)
+              }
             >
-              <Icon name="link" size={16} />
-              Ссылка
+              <Icon name={watching ? 'visibility' : 'visibility_off'} size={16} />
+              {watching ? 'Наблюдаю' : 'Наблюдать'}
             </button>
-            <button
-              type="button"
-              className="btn"
-              style={{ background: st.bg, borderColor: 'transparent', color: st.fg, fontWeight: 500 }}
-              onClick={() => {
-                setStatusMenu(!statusMenu)
-                setTaskMenu(false)
-              }}
-            >
-              <span className="badge__dot" style={{ background: st.dot, width: 6, height: 6 }} />
-              {status}
-              <Icon name="expand_more" size={15} />
-            </button>
-            <button
-              type="button"
-              className="btn btn--icon"
-              onClick={() => {
-                setTaskMenu(!taskMenu)
-                setStatusMenu(false)
-              }}
-              aria-label="Действия с задачей"
-            >
-              <Icon name="more_horiz" size={17} />
-            </button>
-
-            {statusMenu && (
-              <div className="menu" style={{ top: 32, right: 34, width: 190 }}>
-                <div className="vk-eyebrow" style={{ padding: '5px 8px 6px' }}>
-                  Перевести в
-                </div>
-                {(['Open', 'In Progress', 'Review', 'Testing', 'Done', 'Blocked'] as StatusName[]).map(
-                  (s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className="menu__item"
-                      style={{ background: s === status ? 'var(--surface2)' : undefined }}
-                      onClick={() => {
-                        setStatus(raw.key, s)
-                        setStatusMenu(false)
-                        toast('Статус обновлён', `${raw.key} → ${s}`, s === 'Done' ? 'ok' : 'info')
-                      }}
-                    >
-                      <span
-                        className="badge__dot"
-                        style={{ background: ST[s].dot, width: 6, height: 6 }}
-                      />
-                      <span style={{ flex: 1 }}>{s}</span>
-                      {s === status && <Icon name="check" size={15} color="var(--ac)" />}
-                    </button>
-                  ),
-                )}
-              </div>
+            {can('task.delete') && (
+              <button
+                type="button"
+                className="btn btn--icon"
+                title="Удалить задачу"
+                onClick={() => {
+                  if (!window.confirm(`Удалить задачу ${task.key}? Действие необратимо.`)) return
+                  void removeTask
+                    .mutateAsync()
+                    .then(() => {
+                      toast('Задача удалена', task.key, 'ok')
+                      nav('/tasks')
+                    })
+                    .catch(toastError)
+                }}
+              >
+                <Icon name="delete" size={17} />
+              </button>
             )}
-
-            {taskMenu && (
-              <div className="menu" style={{ top: 32, right: 0, width: 196 }}>
-                <button
-                  type="button"
-                  className="menu__item"
-                  onClick={() => {
-                    setTaskMenu(false)
-                    toast('Задача клонирована', 'Создана VEKHA-147')
-                  }}
-                >
-                  <Icon name="content_copy" size={16} />
-                  Клонировать
-                </button>
-                <button
-                  type="button"
-                  className="menu__item"
-                  onClick={() => {
-                    setTaskMenu(false)
-                    toast('Перенос', 'Выберите очередь в диалоге', 'info')
-                  }}
-                >
-                  <Icon name="move_down" size={16} />
-                  Перенести в очередь
-                </button>
-                <button
-                  type="button"
-                  className="menu__item"
-                  onClick={() => {
-                    setTaskMenu(false)
-                    setTab('links')
-                  }}
-                >
-                  <Icon name="link" size={16} />
-                  Связать задачу
-                </button>
-                <button
-                  type="button"
-                  className="menu__item"
-                  style={{ color: 'var(--dang)' }}
-                  onClick={() => {
-                    setTaskMenu(false)
-                    toast('Удаление отклонено', 'Нет прав на удаление в очереди VEKHA', 'err')
-                  }}
-                >
-                  <Icon name="delete" size={16} color="var(--dang)" />
-                  Удалить
-                </button>
-              </div>
-            )}
-          </div>
+          </span>
         </div>
 
-        <h1
-          className="pretty"
-          style={{ margin: '0 0 12px', fontSize: 22, lineHeight: 1.25, letterSpacing: '-0.02em' }}
-        >
-          {raw.title}
-        </h1>
-
-        <section className="card card--pad" style={{ marginBottom: 11 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-            <Icon name="description" size={16} color="var(--tx3)" />
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>Описание</div>
+        {editingTitle ? (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              className="input"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              style={{ height: 36, fontSize: 17, fontWeight: 600 }}
+              autoFocus
+            />
             <button
               type="button"
-              className="btn btn--link spacer"
-              onClick={() => setEditing(!editing)}
-            >
-              {editing ? 'Просмотр' : 'Редактировать'}
-            </button>
-          </div>
-          {editing && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-                padding: '5px 6px',
-                marginBottom: 8,
-                background: 'var(--surface2)',
-                border: '1px solid var(--border)',
-                borderRadius: 7,
-                animation: 'vk-pop 150ms cubic-bezier(.2,.8,.3,1)',
-                flexWrap: 'wrap',
+              className="btn btn--primary"
+              onClick={() => {
+                void patch({ title: titleDraft }, 'Заголовок обновлён')
+                setEditingTitle(false)
               }}
             >
-              {RICH_TOOLS.map((rt) => (
-                <span key={rt.icon} style={{ display: 'contents' }}>
-                  <button
-                    type="button"
-                    className="btn btn--icon-quiet"
-                    title={rt.title}
-                    aria-label={rt.title}
-                  >
-                    <Icon name={rt.icon} size={16} />
-                  </button>
-                  {rt.sep && (
-                    <span
-                      style={{
-                        width: 1,
-                        height: 16,
-                        background: 'var(--border)',
-                        margin: '0 3px',
-                      }}
-                    />
-                  )}
-                </span>
-              ))}
-              <span className="spacer" style={{ display: 'flex', gap: 6 }}>
+              Сохранить
+            </button>
+            <button type="button" className="btn btn--secondary" onClick={() => setEditingTitle(false)}>
+              Отмена
+            </button>
+          </div>
+        ) : (
+          <h1
+            className="task__title"
+            onDoubleClick={() => editable && setEditingTitle(true)}
+            title={editable ? 'Двойной клик — переименовать' : undefined}
+          >
+            {task.title}
+          </h1>
+        )}
+
+        {/* ── Переходы статуса ─────────────────────────────────────────── */}
+        <div className="task__flow">
+          <StatusBadge status={task.status} category={task.statusCategory} />
+          <Icon name="arrow_forward" size={15} color="var(--tx3)" />
+          {data.transitions.length === 0 && (
+            <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>переходов нет</span>
+          )}
+          {data.transitions.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="btn btn--secondary btn--sm"
+              title={t.condition ? `Условие: ${t.condition}` : undefined}
+              aria-label={`Перевести в ${t.to}`}
+              onClick={() => void patch({ status: t.to }, `${task.status} → ${t.to}`)}
+            >
+              {t.to}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Описание ─────────────────────────────────────────────────── */}
+        <section className="card card--pad" style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div className="card__title">Описание</div>
+            {editable && !editingDescription && (
+              <button
+                type="button"
+                className="btn btn--link spacer"
+                onClick={() => setEditingDescription(true)}
+              >
+                Редактировать
+              </button>
+            )}
+          </div>
+
+          {editingDescription ? (
+            <>
+              <textarea
+                className="textarea"
+                rows={10}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button
                   type="button"
-                  className="btn btn--secondary btn--sm"
-                  onClick={() => setEditing(false)}
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--primary btn--sm"
+                  className="btn btn--primary"
                   onClick={() => {
-                    setEditing(false)
-                    toast('Описание сохранено', 'Версия добавлена в историю изменений')
+                    void patch({ description: draft }, 'Описание обновлено')
+                    setEditingDescription(false)
                   }}
                 >
                   Сохранить
                 </button>
-              </span>
-            </div>
-          )}
-          <div
-            className="pretty"
-            style={{
-              fontSize: 13,
-              color: 'var(--tx2)',
-              lineHeight: 1.6,
-              padding: editing ? '10px 11px' : 0,
-              border: `1px solid ${editing ? 'var(--ac)' : 'transparent'}`,
-              borderRadius: 8,
-              transition: 'border-color 160ms ease',
-            }}
-          >
-            <p style={{ margin: '0 0 8px' }}>
-              Текущая навигация выросла исторически: разделы дублируют друг друга,
-              вложенность до четырёх уровней, часть путей ведёт в тупик. Нужно свести
-              структуру к восьми основным разделам и вынести управление в отдельную группу.
-            </p>
-            <p style={{ margin: '0 0 8px' }}>
-              Ожидаемый результат — новая карта навигации, макеты левого меню в трёх
-              состояниях (полное, свёрнутое, поиск) и правила для активного состояния.
-            </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                padding: '9px 11px',
-                background: 'var(--ac-soft)',
-                borderRadius: 8,
-                color: 'var(--ac-tx)',
-                fontSize: 12.5,
-              }}
-            >
-              <Icon name="info" size={17} />
-              <span>
-                Блокирует VEKHA-138 и VEKHA-129. Согласовать с командой Mobile до 25
-                августа.
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section className="card card--pad" style={{ marginBottom: 11 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-            <Icon name="checklist" size={16} color="var(--tx3)" />
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>Подзадачи</div>
-            <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-              {doneCount}/{CHECKLIST.length}
-            </span>
-            <Progress
-              pct={`${Math.round((doneCount / CHECKLIST.length) * 100)}%`}
-              color="var(--ok)"
-              variant="thin"
-              style={{ flex: 1, maxWidth: 140, marginLeft: 4 }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {CHECKLIST.map((c) => {
-              const on = Boolean(checks[c.id])
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => toggleCheck(c.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 9,
-                    height: 32,
-                    padding: '0 6px',
-                    borderRadius: 7,
-                    cursor: 'pointer',
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => {
+                    setDraft(task.description)
+                    setEditingDescription(false)
                   }}
                 >
-                  <Checkbox
-                    on={on}
-                    tone="ok"
-                    label={c.text}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleCheck(c.id)
-                    }}
-                  />
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
-                    {c.key}
-                  </span>
-                  <span
-                    className="ellipsis"
-                    style={{
-                      fontSize: 12.5,
-                      flex: 1,
-                      color: on ? 'var(--tx3)' : 'var(--tx)',
-                      textDecoration: on ? 'line-through' : 'none',
-                    }}
-                  >
-                    {c.text}
-                  </span>
-                  <Avatar id={c.who} size="xs" />
-                </div>
-              )
-            })}
-          </div>
-          <button
-            type="button"
-            className="btn btn--dashed"
-            style={{ marginTop: 6 }}
-            onClick={() => toast('Подзадача создана', 'VEKHA-147 добавлена в чек-лист')}
-          >
-            <Icon name="add" size={15} />
-            Добавить подзадачу
-          </button>
-        </section>
-
-        <section className="card card--pad" style={{ marginBottom: 11 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-            <Icon name="attach_file" size={16} color="var(--tx3)" />
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>Вложения</div>
-            <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-              {ATTACHMENTS.length}
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
-              gap: 8,
-            }}
-          >
-            {ATTACHMENTS.map((at) => (
-              <div key={at.name} className="att">
-                <div className="att__thumb">
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>
-                    {at.kind}
-                  </span>
-                </div>
-                <div style={{ padding: '7px 8px' }}>
-                  <div className="ellipsis" style={{ fontSize: 11.5 }}>
-                    {at.name}
-                  </div>
-                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>
-                    {at.size}
-                  </div>
-                </div>
+                  Отмена
+                </button>
               </div>
-            ))}
-          </div>
+            </>
+          ) : task.description ? (
+            <p className="pretty task__description">{task.description}</p>
+          ) : (
+            <p className="task__description task__description--empty">
+              Описания пока нет. {editable && 'Нажмите «Редактировать», чтобы добавить контекст.'}
+            </p>
+          )}
         </section>
 
-        <section className="card card--clip">
-          <div style={{ padding: '0 12px', borderBottom: '1px solid var(--border)' }}>
+        {/* ── Подзадачи ────────────────────────────────────────────────── */}
+        <section className="card card--clip" style={{ marginTop: 12 }}>
+          <div className="card__head">
+            <div className="card__title">Подзадачи</div>
+            {subtaskProgress && (
+              <>
+                <span className="count-pill">
+                  {subtaskProgress.done} / {subtaskProgress.total}
+                </span>
+                <Progress
+                  pct={subtaskProgress.pct}
+                  color="var(--ok)"
+                  variant="thin"
+                  style={{ width: 120, marginLeft: 8 }}
+                />
+              </>
+            )}
+          </div>
+
+          {data.subtasks.length === 0 && <div className="task__none">Подзадач нет</div>}
+
+          {data.subtasks.map((s) => (
+            <div
+              key={s.key}
+              className="row"
+              style={{ gridTemplateColumns: '92px minmax(0,1fr) 116px 28px 60px', gap: 8 }}
+              onClick={() => nav(`/tasks/${s.key}`)}
+            >
+              <TaskKey>{s.key}</TaskKey>
+              <span
+                className="ellipsis"
+                style={{
+                  fontSize: 12.5,
+                  textDecoration: s.statusCategory === 'done' ? 'line-through' : undefined,
+                  color: s.statusCategory === 'done' ? 'var(--tx3)' : undefined,
+                }}
+              >
+                {s.title}
+              </span>
+              <StatusBadge status={s.status} category={s.statusCategory} small />
+              <Avatar id={s.who} size="md" />
+              <span className="mono" style={{ fontSize: 11.5, color: dueColor(s.dueState), textAlign: 'right' }}>
+                {s.due}
+              </span>
+            </div>
+          ))}
+        </section>
+
+        {/* ── Связи ────────────────────────────────────────────────────── */}
+        <section className="card card--clip" style={{ marginTop: 12 }}>
+          <div className="card__head">
+            <div className="card__title">Связанные задачи</div>
+            <span className="count-pill">{data.links.length}</span>
+            {editable && (
+              <button type="button" className="btn btn--link spacer" onClick={() => setLinkOpen(true)}>
+                Добавить связь
+              </button>
+            )}
+          </div>
+
+          {data.links.length === 0 && <div className="task__none">Связей нет</div>}
+
+          {data.links.map((l) => (
+            <div
+              key={l.id}
+              className="row"
+              style={{ gridTemplateColumns: '150px 92px minmax(0,1fr) 116px 26px', gap: 8 }}
+              onClick={() => nav(`/tasks/${l.task.key}`)}
+            >
+              <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{l.label}</span>
+              <TaskKey>{l.task.key}</TaskKey>
+              <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                {l.task.title}
+              </span>
+              <StatusBadge status={l.task.status} category={l.task.statusCategory} small />
+              {editable ? (
+                <button
+                  type="button"
+                  className="btn btn--icon-quiet"
+                  aria-label="Убрать связь"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void dropLink.mutateAsync(l.id).catch(toastError)
+                  }}
+                >
+                  <Icon name="link_off" size={15} />
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          ))}
+        </section>
+
+        {/* ── Вложения ─────────────────────────────────────────────────── */}
+        <section className="card card--clip" style={{ marginTop: 12 }}>
+          <div className="card__head">
+            <div className="card__title">Вложения</div>
+            <span className="count-pill">{data.attachments.length}</span>
+            <button type="button" className="btn btn--link spacer" onClick={() => fileRef.current?.click()}>
+              Загрузить файл
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void uploadFile(file)
+                e.target.value = ''
+              }}
+            />
+          </div>
+
+          {data.attachments.length === 0 && (
+            <div className="task__none">Файлов нет — максимум 25 МБ на файл</div>
+          )}
+
+          {data.attachments.map((a) => (
+            <div
+              key={a.id}
+              className="row row--static"
+              style={{ gridTemplateColumns: '26px minmax(0,1fr) 90px 120px 26px', gap: 8 }}
+            >
+              <Icon name={a.mime.startsWith('image/') ? 'image' : 'description'} size={17} color="var(--tx2)" />
+              <a href={a.url} target="_blank" rel="noreferrer" className="ellipsis task__file">
+                {a.filename}
+              </a>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
+                {fileSize(a.size)}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{a.byName}</span>
+              <button
+                type="button"
+                className="btn btn--icon-quiet"
+                aria-label="Удалить вложение"
+                onClick={() => void dropAttachment.mutateAsync(a.id).catch(toastError)}
+              >
+                <Icon name="close" size={15} />
+              </button>
+            </div>
+          ))}
+        </section>
+
+        {/* ── Обсуждение ───────────────────────────────────────────────── */}
+        <section className="card card--clip" style={{ marginTop: 12 }}>
+          <div style={{ padding: '0 13px' }}>
             <UnderlineTabs
               options={TABS.map((t) => ({
-                value: t.value,
-                label: t.label,
+                ...t,
                 count:
                   t.value === 'comments'
-                    ? String(comments.length)
+                    ? String(comments.data?.length ?? 0)
                     : t.value === 'history'
-                      ? String(TASK_HISTORY.length)
-                      : t.value === 'all'
-                        ? String(TASK_HISTORY.length + EVENT_HISTORY.length)
-                        : String(LINKED.length),
+                      ? String(history.data?.length ?? 0)
+                      : undefined,
               }))}
               value={tab}
               onChange={setTab}
-              height={38}
             />
           </div>
 
-          {tab === 'comments' && (
-            <div style={{ padding: '13px 14px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-                {comments.map((c) => {
-                  const p = PEOPLE[c.who]
-                  return (
-                    <div
-                      key={c.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '26px minmax(0,1fr)',
-                        gap: 10,
-                        animation: c.fresh
-                          ? 'vk-row 240ms cubic-bezier(.2,.8,.3,1)'
-                          : undefined,
-                      }}
-                    >
-                      <span className="av av--lg" style={{ background: p.bg, color: p.fg }}>
-                        {p.who}
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{p.name}</span>
-                          <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{c.time}</span>
-                          {c.badge && (
+          <div style={{ padding: '12px 13px' }}>
+            {(tab === 'comments' || tab === 'all') && (
+              <>
+                {(comments.data ?? []).length === 0 && (
+                  <div className="task__none" style={{ padding: '4px 0 12px' }}>
+                    Комментариев пока нет
+                  </div>
+                )}
+                {(comments.data ?? []).map((c) => (
+                  <article key={c.id} className="comment">
+                    <Avatar id={c.who} size="lg" />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="comment__head">
+                        <b>{people.find((p) => p.code === c.who)?.name ?? c.who}</b>
+                        <span className="mono">{c.time}</span>
+                        {c.edited && <span className="comment__edited">изменён</span>}
+                      </div>
+                      <p className="pretty comment__text">{c.text}</p>
+                    </div>
+                  </article>
+                ))}
+              </>
+            )}
+
+            {(tab === 'history' || tab === 'all') && (
+              <div className="tl" style={{ marginTop: tab === 'all' ? 14 : 0 }}>
+                {(history.data ?? []).map((h) => (
+                  <div key={h.id} className="tl__rail">
+                    <span className="tl__dot" style={{ background: h.bg, color: h.fg }}>
+                      <Icon name={h.icon} size={13} />
+                    </span>
+                    <span className="tl__line" />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: 12 }}>
+                        <b style={{ fontWeight: 600 }}>{h.who}</b> {h.what}
+                        {h.from && h.to && (
+                          <>
+                            {' '}
+                            <span className="tl__from">{h.from}</span>
+                            <Icon name="arrow_forward" size={12} color="var(--tx3)" />
                             <span
                               className="badge badge--sm"
-                              style={{ background: 'var(--ac-soft)', color: 'var(--ac-tx)' }}
+                              style={{ background: h.toBg ?? 'var(--n-bg)', color: h.toFg ?? 'var(--tx2)' }}
                             >
-                              {c.badge}
+                              {h.to}
                             </span>
-                          )}
-                        </div>
-                        <div
-                          className="pretty"
-                          style={{
-                            fontSize: 12.5,
-                            color: 'var(--tx2)',
-                            lineHeight: 1.55,
-                            marginTop: 3,
-                          }}
-                        >
-                          {c.text}
-                        </div>
-                        <div style={{ display: 'flex', gap: 12, marginTop: 5 }}>
-                          <button type="button" className="btn btn--link" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-                            Ответить
-                          </button>
-                          <button type="button" className="btn btn--link" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-                            Цитировать
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '26px minmax(0,1fr)',
-                  gap: 10,
-                  marginTop: 14,
-                  paddingTop: 13,
-                  borderTop: '1px solid var(--border)',
-                }}
-              >
-                <Avatar id="AK" size="lg" />
-                <div>
-                  <div
-                    className="composer"
-                    style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      background: 'var(--surface2)',
-                    }}
-                  >
-                    <textarea
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      placeholder="Комментарий, @упоминание или ссылка на задачу…"
-                      rows={2}
-                      style={{
-                        width: '100%',
-                        border: 0,
-                        outline: 'none',
-                        background: 'transparent',
-                        resize: 'vertical',
-                        padding: '9px 10px',
-                        fontSize: 12.5,
-                        color: 'var(--tx)',
-                        fontFamily: 'inherit',
-                      }}
-                    />
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        padding: '6px 8px',
-                        borderTop: '1px solid var(--border)',
-                      }}
-                    >
-                      {EDITOR_TOOLS.map((et) => (
-                        <button
-                          key={et.icon}
-                          type="button"
-                          className="btn btn--icon-quiet"
-                          style={{ width: 24, height: 24 }}
-                          title={et.title}
-                          aria-label={et.title}
-                        >
-                          <Icon name={et.icon} size={16} />
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="btn btn--primary btn--sm spacer"
-                        onClick={addComment}
-                      >
-                        Отправить
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {(tab === 'history' || tab === 'all') && (
-            <div style={{ padding: '13px 14px' }}>
-              {history.map((h, i) => (
-                <div key={i} className="tl">
-                  <div className="tl__rail">
-                    <div className="tl__dot" style={{ background: h.bg, color: h.fg }}>
-                      <Icon name={h.icon} size={14} />
-                    </div>
-                    {i < history.length - 1 && <div className="tl__line" />}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12.5, color: 'var(--tx2)' }}>
-                      <span style={{ color: 'var(--tx)', fontWeight: 500 }}>{h.who}</span>{' '}
-                      {h.what}
-                    </div>
-                    <div
-                      style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4 }}
-                    >
-                      {h.from && (
-                        <>
-                          <span
-                            className="badge badge--sm"
-                            style={{ background: 'var(--n-bg)', color: 'var(--tx2)' }}
-                          >
-                            {h.from}
-                          </span>
-                          <Icon name="arrow_forward" size={14} color="var(--tx3)" />
-                        </>
-                      )}
-                      {h.to && (
-                        <span
-                          className="badge badge--sm"
-                          style={{ background: h.toBg, color: h.toFg }}
-                        >
-                          {h.to}
-                        </span>
-                      )}
-                      <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
-                        {h.time}
+                          </>
+                        )}
                       </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {tab === 'links' && (
-            <div style={{ padding: '6px 0' }}>
-              {LINKED.map((lk) => {
-                const t = findTask(lk.key)
-                return (
-                  <div
-                    key={lk.key}
-                    className="row"
-                    style={{
-                      display: 'flex',
-                      gap: 10,
-                      padding: '0 14px',
-                      height: 38,
-                    }}
-                    onClick={() => nav(`/tasks/${lk.key}`)}
-                  >
-                    <span
-                      style={{
-                        width: 84,
-                        fontSize: 11,
-                        color: 'var(--tx3)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.03em',
-                      }}
-                    >
-                      {lk.rel}
+                      <span className="tl__meta">{h.time}</span>
                     </span>
-                    <span style={{ width: 82 }}>
-                      <TaskKey>{t.key}</TaskKey>
-                    </span>
-                    <span className="ellipsis" style={{ flex: 1, fontSize: 12.5 }}>
-                      {t.title}
-                    </span>
-                    <StatusBadge status={statusOf(t.key)} dot={false} small />
-                    <Avatar id={t.who} />
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <aside className="sticky-aside" style={{ padding: '16px 16px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 11 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Детали</div>
-          <button
-            type="button"
-            className="btn btn--icon-quiet spacer"
-            title="Свернуть панель"
-            aria-label="Свернуть панель"
-          >
-            <Icon name="right_panel_close" size={17} />
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {fieldGroups.map((g) => (
-            <div key={g.title}>
-              <div className="vk-eyebrow" style={{ marginBottom: 3 }}>
-                {g.title}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {g.items.map((f) => (
-                  <div key={f.label} className="detail-row" title="Нажмите, чтобы изменить">
-                    <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{f.label}</span>
-                    {f.kind === 'avatar' && (
-                      <span
-                        style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}
-                      >
-                        <Avatar id={f.who} size="xs" title={false} />
-                        <span className="ellipsis" style={{ fontSize: 12 }}>
-                          {f.value}
-                        </span>
-                      </span>
-                    )}
-                    {f.kind === 'badge' && (
-                      <span
-                        className="badge"
-                        style={{ background: f.bg, color: f.fg }}
-                      >
-                        {f.icon && <Icon name={f.icon} size={15} />}
-                        {f.value}
-                      </span>
-                    )}
-                    {f.kind === 'text' && (
-                      <span className="ellipsis" style={{ fontSize: 12 }}>
-                        {f.value}
-                      </span>
-                    )}
-                    {f.kind === 'mono' && (
-                      <span
-                        className="ellipsis mono"
-                        style={{ fontSize: 12, color: f.fg ?? 'var(--tx)' }}
-                      >
-                        {f.value}
-                      </span>
-                    )}
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div className="composer">
+            <Avatar id={me?.code ?? null} size="lg" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Написать комментарий. Упоминание через @ — например @dmitry"
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault()
+                    if (commentText.trim()) {
+                      void addComment
+                        .mutateAsync({ key, text: commentText })
+                        .then(() => setCommentText(''))
+                        .catch(toastError)
+                    }
+                  }
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--tx3)' }}>⌘↵ отправить</span>
+                <button
+                  type="button"
+                  className="btn btn--primary spacer"
+                  disabled={!commentText.trim() || addComment.isPending}
+                  onClick={() =>
+                    void addComment
+                      .mutateAsync({ key, text: commentText })
+                      .then(() => setCommentText(''))
+                      .catch(toastError)
+                  }
+                >
+                  Отправить
+                </button>
+              </div>
             </div>
-          ))}
+          </div>
+        </section>
+      </div>
+
+      {/* ── Панель полей ───────────────────────────────────────────────── */}
+      <aside className="task__side">
+        <div className="card card--pad">
+          <div className="card__title" style={{ marginBottom: 10 }}>
+            Поля
+          </div>
+
+          <Field label="Исполнитель">
+            <div className="select-with-avatar">
+              <Avatar id={task.who} size="xs" title={false} />
+              <select
+                className="select"
+                value={task.who ?? ''}
+                disabled={!editable}
+                onChange={(e) => void patch({ assignee: e.target.value || null }, 'Исполнитель изменён')}
+              >
+                <option value="">Не назначен</option>
+                {people
+                  .filter((p) => p.active)
+                  .map((p) => (
+                    <option key={p.id} value={p.code}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </Field>
+
+          <Field label="Приоритет">
+            <div className="select-with-avatar">
+              <PriorityChip priority={task.priority} small />
+              <select
+                className="select"
+                value={task.priority}
+                disabled={!editable}
+                onChange={(e) =>
+                  void patch({ priority: PRIORITY_KEY[e.target.value as PriorityName] }, 'Приоритет изменён')
+                }
+              >
+                {PRIORITY_NAMES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Field>
+
+          <Field label="Дедлайн">
+            <input
+              className="input"
+              type="date"
+              disabled={!editable}
+              value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
+              onChange={(e) => void patch({ dueDate: e.target.value || null }, 'Дедлайн изменён')}
+            />
+          </Field>
+
+          <Field label="Оценка, SP">
+            <input
+              className="input"
+              type="number"
+              min={0}
+              disabled={!editable}
+              defaultValue={task.est || ''}
+              onBlur={(e) => {
+                const value = e.target.value === '' ? null : Number(e.target.value)
+                if (value !== (task.est || null)) void patch({ estimate: value }, 'Оценка изменена')
+              }}
+            />
+          </Field>
+
+          <Field label="Проект">
+            <select
+              className="select"
+              value={task.projectId ? task.project : ''}
+              disabled={!editable}
+              onChange={(e) => void patch({ project: e.target.value || null }, 'Проект изменён')}
+            >
+              <option value="">Без проекта</option>
+              {(projects.data ?? []).map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Спринт">
+            <select
+              className="select"
+              value={task.sprintId ? task.sprint : ''}
+              disabled={!can('sprint.manage')}
+              onChange={(e) => void patch({ sprint: e.target.value || null }, 'Спринт изменён')}
+            >
+              <option value="">Бэклог</option>
+              {(sprints.data ?? [])
+                .filter((s) => s.queue === task.queue)
+                .map((s) => (
+                  <option key={s.id} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
+
+          <Field label="Очередь">
+            <Link to={`/tasks?queue=${task.queue}`} className="task__link mono">
+              {task.queue}
+            </Link>
+          </Field>
+
+          <Field label="Автор">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Avatar id={task.authorCode} size="xs" />
+              <span style={{ fontSize: 12 }}>
+                {people.find((p) => p.code === task.authorCode)?.name ?? task.authorCode}
+              </span>
+            </span>
+          </Field>
+
+          <Field label="Теги">
+            <div className="tagline tagline--tight">
+              {task.tags.length === 0 && <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>—</span>}
+              {task.tags.map((t) => (
+                <Link key={t} to={`/tasks?tag=${t}`}>
+                  <Tag>{t}</Tag>
+                </Link>
+              ))}
+            </div>
+          </Field>
         </div>
 
-        <div className="vk-sep" style={{ margin: '12px 0' }} />
-        <div style={{ fontSize: 11.5, color: 'var(--tx3)', marginBottom: 7 }}>Теги</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-          {raw.tags.map((t) => (
-            <span
-              key={t}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                height: 22,
-                padding: '0 8px',
-                borderRadius: 6,
-                background: 'var(--n-bg)',
-                color: 'var(--tx2)',
-                fontSize: 11.5,
+        <div className="card card--pad">
+          <div className="card__title" style={{ marginBottom: 10 }}>
+            Наблюдатели
+          </div>
+          <div className="task__watchers">
+            {data.watchers.map((w) => (
+              <span key={w.id} className="task__watcher">
+                <Avatar id={w.code} size="md" />
+                <span className="ellipsis">{w.name}</span>
+                {editable && (
+                  <button
+                    type="button"
+                    className="chip__x"
+                    aria-label={`Убрать ${w.name}`}
+                    onClick={() =>
+                      void api
+                        .del(`/api/tasks/${encodeURIComponent(key)}/watchers/${w.code}`)
+                        .then(() => invalidate(['tasks']))
+                        .catch(toastError)
+                    }
+                  >
+                    <Icon name="close" size={13} />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+
+          {editable && (
+            <select
+              className="select"
+              style={{ marginTop: 8 }}
+              value=""
+              onChange={(e) => {
+                if (!e.target.value) return
+                void api
+                  .post(`/api/tasks/${encodeURIComponent(key)}/watchers`, { user: e.target.value })
+                  .then(() => invalidate(['tasks']))
+                  .catch(toastError)
               }}
             >
-              {t}
-            </span>
-          ))}
-          <button
-            type="button"
-            className="btn btn--dashed"
-            style={{ height: 22, padding: '0 7px', fontSize: 11.5 }}
-            onClick={() => toast('Тег добавлен', 'navigation', 'info')}
-          >
-            + тег
+              <option value="">+ добавить наблюдателя</option>
+              {people
+                .filter((p) => p.active && !data.watchers.some((w) => w.id === p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.code}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </div>
+      </aside>
+
+      {linkOpen && (
+        <LinkDialog
+          busy={addLink.isPending}
+          onClose={() => setLinkOpen(false)}
+          onSave={async (target, type) => {
+            try {
+              await addLink.mutateAsync({ target, type })
+              toast('Связь добавлена', `${task.key} → ${target}`, 'ok')
+              setLinkOpen(false)
+            } catch (err) {
+              toastError(err)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="detail-row">
+      <span>{label}</span>
+      <div style={{ minWidth: 0 }}>{children}</div>
+    </div>
+  )
+}
+
+function LinkDialog({
+  busy,
+  onClose,
+  onSave,
+}: {
+  busy: boolean
+  onClose: () => void
+  onSave: (target: string, type: string) => void
+}) {
+  const [target, setTarget] = useState('')
+  const [type, setType] = useState('relates')
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div
+        className="modal"
+        style={{ width: 440, maxWidth: '94vw' }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Новая связь"
+      >
+        <div className="modal__head">
+          <Icon name="link" size={18} color="var(--ac)" />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Связать задачи</div>
+          <button type="button" className="btn btn--icon-quiet spacer" onClick={onClose} aria-label="Закрыть">
+            <Icon name="close" size={17} />
           </button>
         </div>
 
-        <div className="vk-sep" style={{ margin: '12px 0' }} />
-        <div style={{ fontSize: 11.5, color: 'var(--tx3)', marginBottom: 7 }}>
-          Наблюдатели
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span className="av-stack">
-            {WATCHERS.map((w) => (
-              <Avatar key={w} id={w} size="md" />
-            ))}
-          </span>
-          <button
-            type="button"
-            className="av-add"
-            aria-label="Добавить наблюдателя"
-            onClick={() => toast('Наблюдатель добавлен', 'Елена Лапина')}
-          >
-            <Icon name="add" size={14} />
-          </button>
+        <div className="modal__body">
+          <label className="label">
+            <span>Тип связи</span>
+            <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="relates">связана с</option>
+              <option value="blocks">блокирует</option>
+              <option value="duplicates">дублирует</option>
+              <option value="causes">вызывает</option>
+            </select>
+          </label>
+          <label className="label">
+            <span>Ключ задачи</span>
+            <input
+              className="input mono"
+              value={target}
+              onChange={(e) => setTarget(e.target.value.toUpperCase())}
+              placeholder="VEKHA-138"
+              autoFocus
+            />
+          </label>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 16 }}>
+        <div className="modal__foot">
+          <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
+            Отмена
+          </button>
           <button
             type="button"
             className="btn btn--primary btn--lg"
-            style={{ justifyContent: 'center' }}
-            onClick={() => {
-              setStatus(raw.key, nextStatus)
-              toast(
-                'Статус обновлён',
-                `${raw.key} → ${nextStatus}`,
-                nextStatus === 'Done' ? 'ok' : 'info',
-              )
-            }}
+            disabled={busy || !target.trim()}
+            onClick={() => onSave(target.trim(), type)}
           >
-            <Icon name="arrow_forward" size={16} />
-            Перевести в {nextStatus}
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--lg"
-            style={{ justifyContent: 'center', background: 'var(--surface2)' }}
-            onClick={() => toast('Таймер запущен', `Время списывается на ${raw.key}`, 'info')}
-          >
-            <Icon name="timer" size={16} />
-            Списать время
+            Связать
           </button>
         </div>
-      </aside>
+      </div>
     </div>
   )
 }

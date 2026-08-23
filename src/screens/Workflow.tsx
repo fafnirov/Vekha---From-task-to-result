@@ -1,730 +1,1026 @@
-import { useState } from 'react'
-import { Checkbox, Icon, Segmented, StatusBadge, Toggle } from '../components/ui'
-import { ST } from '../data/catalog'
-import type { StatusName } from '../data/types'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Avatar, Checkbox, Empty, Icon, Segmented, Toggle, UnderlineTabs } from '../components/ui'
+import { ROLE_LABEL } from '../data/catalog'
+import { api } from '../api/client'
 import {
-  PERMISSIONS,
-  ROLE_COLS,
-  RULES,
-  TASK_FIELDS,
-  TEMPLATES,
-  TRANSITIONS,
-  WF_EDGES,
-  WF_NODES,
-} from '../data/workspace'
+  useApiMutation,
+  useBoard,
+  useFields,
+  useInvites,
+  usePermissions,
+  useQueues,
+  useRules,
+  useTemplates,
+  useWorkflows,
+} from '../api/hooks'
+import { useSession } from '../store/session'
 import { useApp } from '../store/app'
+import type { AccessRole, Workflow as WorkflowType } from '../data/types'
 
-const WF_TABS = [
-  { k: 'statuses', label: 'Воркфлоу', icon: 'account_tree' },
-  { k: 'fields', label: 'Поля задачи', icon: 'view_list' },
-  { k: 'roles', label: 'Роли и права', icon: 'admin_panel_settings' },
-  { k: 'auto', label: 'Автоматизации', icon: 'bolt' },
-  { k: 'templates', label: 'Шаблоны', icon: 'content_paste' },
-] as const
+type TabId = 'workflow' | 'fields' | 'permissions' | 'rules' | 'templates' | 'people' | 'board'
 
-type WfTab = (typeof WF_TABS)[number]['k']
-
-const VIEWS = [
-  { value: 'list', label: 'Список' },
-  { value: 'schema', label: 'Схема' },
-] as const
-
-const FLOW: StatusName[] = ['New', 'Open', 'In Progress', 'Review', 'Testing', 'Done']
-
-const INSPECTOR = [
-  {
-    title: 'Кто может выполнять',
-    items: [
-      { label: 'Исполнитель', icon: 'person', fg: 'var(--ac)' },
-      { label: 'Лид очереди', icon: 'shield_person', fg: 'var(--ac)' },
-    ],
-  },
-  {
-    title: 'Условия',
-    items: [
-      { label: 'Есть описание', icon: 'description', fg: 'var(--ok)' },
-      { label: 'Указана оценка', icon: 'straighten', fg: 'var(--ok)' },
-    ],
-  },
-  {
-    title: 'Действия после',
-    items: [
-      { label: 'Уведомить ревьюера', icon: 'notifications', fg: 'var(--vio)' },
-      { label: 'Поставить метку', icon: 'sell', fg: 'var(--vio)' },
-    ],
-  },
-]
-
-const BUILDER_BLOCKS = [
-  {
-    kind: 'Когда',
-    bg: 'var(--ac-soft)',
-    fg: 'var(--ac-tx)',
-    addLabel: 'триггер',
-    rows: [
-      { icon: 'bolt', icFg: 'var(--ac)', field: 'событие', value: 'Смена статуса задачи' },
-    ],
-  },
-  {
-    kind: 'Если',
-    bg: 'var(--warn-bg)',
-    fg: 'var(--warn)',
-    addLabel: 'условие',
-    rows: [
-      { icon: 'sync_alt', icFg: 'var(--warn)', field: 'статус', value: '= Review' },
-      { icon: 'layers', icFg: 'var(--warn)', field: 'очередь', value: '= VEKHA' },
-    ],
-  },
-  {
-    kind: 'То',
-    bg: 'var(--ok-bg)',
-    fg: 'var(--ok)',
-    addLabel: 'действие',
-    rows: [
-      { icon: 'person_add', icFg: 'var(--ok)', field: 'назначить', value: 'ревьюера команды' },
-      { icon: 'notifications', icFg: 'var(--ok)', field: 'уведомить', value: 'наблюдателей' },
-    ],
-  },
+const TABS: { value: TabId; label: string }[] = [
+  { value: 'workflow', label: 'Воркфлоу' },
+  { value: 'fields', label: 'Поля' },
+  { value: 'permissions', label: 'Права' },
+  { value: 'rules', label: 'Автоматизации' },
+  { value: 'templates', label: 'Шаблоны' },
+  { value: 'board', label: 'Доска' },
+  { value: 'people', label: 'Участники' },
 ]
 
 export function Workflow() {
-  const {
-    fieldReq,
-    fieldCard,
-    toggleField,
-    perms,
-    togglePerm,
-    ruleOn,
-    toggleRule,
-    toast,
-  } = useApp()
+  const [params, setParams] = useSearchParams()
+  const { can } = useSession()
+  const tabParam = params.get('tab') as TabId | null
+  const [tab, setTab] = useState<TabId>(tabParam ?? 'workflow')
 
-  const [tab, setTab] = useState<WfTab>('statuses')
-  const [view, setView] = useState<(typeof VIEWS)[number]['value']>('list')
-  const [selected, setSelected] = useState<StatusName>('In Progress')
-  const [builderOpen, setBuilderOpen] = useState(false)
-  const [ruleName, setRuleName] = useState('')
+  useEffect(() => {
+    if (tabParam && tabParam !== tab) setTab(tabParam)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabParam])
+
+  function pickTab(next: TabId) {
+    setTab(next)
+    const p = new URLSearchParams(params)
+    p.set('tab', next)
+    setParams(p, { replace: true })
+  }
+
+  const manage = can('workflow.manage')
 
   return (
-    <div
-      className="split"
-      style={{ gridTemplateColumns: '196px minmax(0,1fr)', minHeight: '100%', gap: 0 }}
-    >
-      <aside className="filter-side" style={{ padding: '14px 10px 30px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 11px' }}>
-          <div
-            className="mono"
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 7,
-              background: 'var(--ac-soft2)',
-              color: 'var(--ac)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 10,
-              fontWeight: 600,
-            }}
-          >
-            VK
+    <div className="page">
+      <div className="page__head">
+        <div className="page__title">Настройки</div>
+        <span className="page__note">
+          {manage ? 'изменения применяются сразу ко всей организации' : 'только просмотр — нужны права администратора'}
+        </span>
+      </div>
+
+      <UnderlineTabs options={TABS} value={tab} onChange={pickTab} />
+
+      <div style={{ marginTop: 12 }}>
+        {tab === 'workflow' && <WorkflowTab manage={manage} />}
+        {tab === 'fields' && <FieldsTab manage={manage} />}
+        {tab === 'permissions' && <PermissionsTab manage={manage} />}
+        {tab === 'rules' && <RulesTab manage={manage} />}
+        {tab === 'templates' && <TemplatesTab manage={manage} />}
+        {tab === 'board' && <BoardTab manage={manage} />}
+        {tab === 'people' && <PeopleTab />}
+      </div>
+    </div>
+  )
+}
+
+/* ── Воркфлоу ─────────────────────────────────────────────────────────── */
+
+function WorkflowTab({ manage }: { manage: boolean }) {
+  const workflows = useWorkflows()
+  const { toast, toastError } = useApp()
+  const [index, setIndex] = useState(0)
+  const [view, setView] = useState<'list' | 'graph'>('list')
+  const [adding, setAdding] = useState(false)
+
+  const wf = workflows.data?.[index]
+
+  const addStatus = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.post(`/api/workflows/${id}/statuses`, body),
+    ['workflow'],
+  )
+  const dropStatus = useApiMutation<string, unknown>((id) => api.del(`/api/statuses/${id}`), ['workflow'])
+  const addTransition = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.post(`/api/workflows/${id}/transitions`, body),
+    ['workflow'],
+  )
+  const dropTransition = useApiMutation<string, unknown>(
+    (id) => api.del(`/api/transitions/${id}`),
+    ['workflow'],
+  )
+
+  if (!wf) return <Empty icon="account_tree" title="Воркфлоу нет" text="Создайте очередь — вместе с ней появится воркфлоу." />
+
+  return (
+    <div className="stack">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <select className="select select--sm" value={index} onChange={(e) => setIndex(Number(e.target.value))}>
+          {(workflows.data ?? []).map((w, i) => (
+            <option key={w.id} value={i}>
+              {w.name} · очередей: {w.queues}
+            </option>
+          ))}
+        </select>
+        <Segmented
+          options={[
+            { value: 'list', label: 'Список' },
+            { value: 'graph', label: 'Схема' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+        {manage && (
+          <button type="button" className="btn btn--dashed btn--sm spacer" onClick={() => setAdding(true)}>
+            <Icon name="add" size={15} />
+            Статус
+          </button>
+        )}
+      </div>
+
+      {/* Статусы */}
+      <section className="card card--pad">
+        <div className="card__title" style={{ marginBottom: 10 }}>
+          Статусы
+        </div>
+        <div className="wf-statuses">
+          {wf.statuses.map((s) => (
+            <span key={s.id} className="wf-pill" style={{ borderColor: s.color }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
+              {s.name}
+              <span className="wf-pill__cat">{s.category}</span>
+              {manage && (
+                <button
+                  type="button"
+                  className="chip__x"
+                  aria-label={`Удалить статус ${s.name}`}
+                  onClick={() =>
+                    void dropStatus
+                      .mutateAsync(s.id)
+                      .then(() => toast('Статус удалён', s.name, 'ok'))
+                      .catch(toastError)
+                  }
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {view === 'list' ? (
+        <section className="card card--clip">
+          <div className="thead" style={{ gridTemplateColumns: '140px 30px 140px minmax(0,1fr) 130px 30px', gap: 10, padding: '0 13px' }}>
+            <span>Из статуса</span>
+            <span />
+            <span>В статус</span>
+            <span>Условие</span>
+            <span>Кому доступно</span>
+            <span />
           </div>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>Очередь VEKHA</div>
-            <div style={{ fontSize: 10.5, color: 'var(--tx3)' }}>128 задач</div>
+
+          {wf.transitions.map((t) => (
+            <div
+              key={t.id}
+              className="row row--static"
+              style={{ gridTemplateColumns: '140px 30px 140px minmax(0,1fr) 130px 30px', gap: 10 }}
+            >
+              <span style={{ fontSize: 12 }}>{t.from}</span>
+              <Icon name="arrow_forward" size={15} color="var(--tx3)" />
+              <span style={{ fontSize: 12, fontWeight: 500 }}>{t.to}</span>
+              <span className="ellipsis" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
+                {t.cond || '—'}
+              </span>
+              <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{t.role}</span>
+              {manage ? (
+                <button
+                  type="button"
+                  className="btn btn--icon-quiet"
+                  aria-label="Удалить переход"
+                  onClick={() => void dropTransition.mutateAsync(t.id).catch(toastError)}
+                >
+                  <Icon name="close" size={15} />
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          ))}
+
+          {manage && (
+            <TransitionForm
+              statuses={wf.statuses.map((s) => s.name)}
+              onAdd={(body) =>
+                void addTransition
+                  .mutateAsync({ id: wf.id, body })
+                  .then(() => toast('Переход добавлен', `${body.from} → ${body.to}`, 'ok'))
+                  .catch(toastError)
+              }
+            />
+          )}
+        </section>
+      ) : (
+        <WorkflowGraph wf={wf} />
+      )}
+
+      {adding && (
+        <StatusDialog
+          busy={addStatus.isPending}
+          onClose={() => setAdding(false)}
+          onSave={async (body) => {
+            try {
+              await addStatus.mutateAsync({ id: wf.id, body })
+              toast('Статус добавлен', String(body.name), 'ok')
+              setAdding(false)
+            } catch (err) {
+              toastError(err)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Схема переходов: статусы раскладываются по колонкам, связи — дугами. */
+function WorkflowGraph({ wf }: { wf: WorkflowType }) {
+  const layout = useMemo(() => {
+    const cols = 3
+    return wf.statuses.map((s, i) => ({
+      ...s,
+      left: 30 + (i % cols) * 190,
+      top: 26 + Math.floor(i / cols) * 92,
+    }))
+  }, [wf.statuses])
+
+  const height = 26 + Math.ceil(wf.statuses.length / 3) * 92 + 40
+  const byName = new Map(layout.map((s) => [s.name, s]))
+
+  return (
+    <section className="card card--pad" style={{ overflowX: 'auto' }}>
+      <div className="wf-canvas" style={{ height, minWidth: 620 }}>
+        <svg className="wf-svg" width={620} height={height} aria-hidden="true">
+          {wf.transitions.map((t) => {
+            const from = byName.get(t.from)
+            const to = byName.get(t.to)
+            if (!from || !to) return null
+            return (
+              <line
+                key={t.id}
+                x1={from.left + 70}
+                y1={from.top + 16}
+                x2={to.left + 70}
+                y2={to.top + 16}
+                stroke="var(--border2)"
+                strokeWidth={1}
+              />
+            )
+          })}
+        </svg>
+
+        {layout.map((s) => (
+          <div
+            key={s.id}
+            className="wf-node"
+            style={{ left: s.left, top: s.top, borderColor: s.color }}
+            title={`${s.name} · ${s.category}`}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
+            {s.name}
+          </div>
+        ))}
+      </div>
+      <p className="report__hint" style={{ marginTop: 8 }}>
+        Линии показывают разрешённые переходы. Задача не сможет попасть из статуса в статус, если перехода нет.
+      </p>
+    </section>
+  )
+}
+
+function TransitionForm({
+  statuses,
+  onAdd,
+}: {
+  statuses: string[]
+  onAdd: (body: Record<string, unknown>) => void
+}) {
+  const [from, setFrom] = useState(statuses[0] ?? '')
+  const [to, setTo] = useState(statuses[1] ?? '')
+  const [condition, setCondition] = useState('')
+  const [role, setRole] = useState<AccessRole>('member')
+
+  return (
+    <div className="row row--static" style={{ gridTemplateColumns: '140px 30px 140px minmax(0,1fr) 130px 90px', gap: 10 }}>
+      <select className="select" value={from} onChange={(e) => setFrom(e.target.value)}>
+        {statuses.map((s) => (
+          <option key={s}>{s}</option>
+        ))}
+      </select>
+      <Icon name="arrow_forward" size={15} color="var(--tx3)" />
+      <select className="select" value={to} onChange={(e) => setTo(e.target.value)}>
+        {statuses.map((s) => (
+          <option key={s}>{s}</option>
+        ))}
+      </select>
+      <input
+        className="input"
+        value={condition}
+        onChange={(e) => setCondition(e.target.value)}
+        placeholder="Условие (текстом, для команды)"
+      />
+      <select className="select" value={role} onChange={(e) => setRole(e.target.value as AccessRole)}>
+        {(['viewer', 'member', 'manager', 'admin'] as AccessRole[]).map((r) => (
+          <option key={r} value={r}>
+            {ROLE_LABEL[r]}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="btn btn--secondary btn--sm"
+        disabled={from === to}
+        onClick={() => onAdd({ from, to, condition, role })}
+      >
+        Добавить
+      </button>
+    </div>
+  )
+}
+
+function StatusDialog({
+  busy,
+  onClose,
+  onSave,
+}: {
+  busy: boolean
+  onClose: () => void
+  onSave: (body: Record<string, unknown>) => void
+}) {
+  const [name, setName] = useState('')
+  const [category, setCategory] = useState('todo')
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="modal__head">
+          <Icon name="flag" size={18} color="var(--ac)" />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Новый статус</div>
+          <button type="button" className="btn btn--icon-quiet spacer" onClick={onClose} aria-label="Закрыть">
+            <Icon name="close" size={17} />
+          </button>
+        </div>
+        <div className="modal__body">
+          <label className="label">
+            <span>Название</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          </label>
+          <label className="label">
+            <span>Категория</span>
+            <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="todo">К выполнению</option>
+              <option value="inprogress">В работе</option>
+              <option value="done">Завершено</option>
+              <option value="blocked">Заблокировано</option>
+            </select>
+          </label>
+          <p className="report__hint">
+            Категория определяет цвет статуса и то, как задача учитывается в отчётах.
+          </p>
+        </div>
+        <div className="modal__foot">
+          <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            disabled={busy || !name.trim()}
+            onClick={() => onSave({ name, category })}
+          >
+            Добавить
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Поля ─────────────────────────────────────────────────────────────── */
+
+function FieldsTab({ manage }: { manage: boolean }) {
+  const fields = useFields()
+  const { toastError } = useApp()
+  const patch = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.patch(`/api/fields/${id}`, body),
+    ['workflow'],
+  )
+
+  const GRID = '30px minmax(0,1fr) 110px 90px 90px 90px'
+
+  return (
+    <section className="card card--clip">
+      <div className="thead" style={{ gridTemplateColumns: GRID, gap: 10, padding: '0 13px' }}>
+        <span />
+        <span>Поле</span>
+        <span>Тип</span>
+        <span>Экран</span>
+        <span>Обязательное</span>
+        <span>На карточке</span>
+      </div>
+
+      {(fields.data ?? []).map((f) => (
+        <div key={f.id} className="row row--static" style={{ gridTemplateColumns: GRID, gap: 10 }}>
+          <Icon name={f.icon} size={17} color="var(--tx2)" />
+          <span style={{ fontSize: 12.5 }}>
+            {f.label}
+            {f.system && <span className="field__sys">системное</span>}
+          </span>
+          <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
+            {f.type}
+          </span>
+          <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{f.screen}</span>
+          <Toggle
+            on={f.req}
+            label={`Обязательное поле ${f.label}`}
+            onClick={() =>
+              manage && void patch.mutateAsync({ id: f.id, body: { required: !f.req } }).catch(toastError)
+            }
+          />
+          <Toggle
+            on={f.card}
+            label={`Показывать ${f.label} на карточке`}
+            onClick={() =>
+              manage && void patch.mutateAsync({ id: f.id, body: { onCard: !f.card } }).catch(toastError)
+            }
+          />
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/* ── Права ────────────────────────────────────────────────────────────── */
+
+function PermissionsTab({ manage }: { manage: boolean }) {
+  const permissions = usePermissions()
+  const { toastError } = useApp()
+  const patch = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.patch('/api/permissions', body),
+    ['workflow'],
+  )
+
+  const roles = permissions.data?.roles ?? []
+  const grid = `minmax(0,1fr) repeat(${roles.length},92px)`
+
+  return (
+    <section className="card card--clip">
+      <div className="thead" style={{ gridTemplateColumns: grid, gap: 10, padding: '0 13px' }}>
+        <span>Действие</span>
+        {roles.map((r) => (
+          <span key={r.key} style={{ textAlign: 'center' }}>
+            {r.label}
+          </span>
+        ))}
+      </div>
+
+      {(permissions.data?.rows ?? []).map((row) => (
+        <div key={row.id} className="row row--static" style={{ gridTemplateColumns: grid, gap: 10 }}>
+          <span style={{ fontSize: 12.5 }}>{row.label}</span>
+          {row.cells.map((cell, i) => (
+            <span key={roles[i]?.key ?? i} style={{ justifySelf: 'center' }}>
+              <Checkbox
+                on={cell}
+                tone="ok"
+                label={`${row.label} — ${roles[i]?.label}`}
+                onClick={() =>
+                  manage &&
+                  void patch
+                    .mutateAsync({ key: row.id, role: roles[i].key, allowed: !cell })
+                    .catch(toastError)
+                }
+              />
+            </span>
+          ))}
+        </div>
+      ))}
+
+      <p className="report__hint" style={{ padding: '10px 13px' }}>
+        Права проверяются на сервере: снятая галочка закрывает действие в API, а не только прячет кнопку.
+      </p>
+    </section>
+  )
+}
+
+/* ── Автоматизации ────────────────────────────────────────────────────── */
+
+function RulesTab({ manage }: { manage: boolean }) {
+  const rules = useRules()
+  const queues = useQueues()
+  const [params, setParams] = useSearchParams()
+  const { toast, toastError } = useApp()
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    if (params.get('new') === '1' && manage) {
+      setCreating(true)
+      const p = new URLSearchParams(params)
+      p.delete('new')
+      setParams(p, { replace: true })
+    }
+  }, [params, setParams, manage])
+
+  const patch = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.patch(`/api/rules/${id}`, body),
+    ['workflow'],
+  )
+  const create = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.post('/api/rules', body),
+    ['workflow'],
+  )
+  const drop = useApiMutation<string, unknown>((id) => api.del(`/api/rules/${id}`), ['workflow'])
+
+  return (
+    <div className="stack">
+      {manage && (
+        <div>
+          <button type="button" className="btn btn--primary" onClick={() => setCreating(true)}>
+            <Icon name="add" size={16} />
+            Правило
+          </button>
+        </div>
+      )}
+
+      {(rules.data ?? []).length === 0 && (
+        <Empty
+          icon="bolt"
+          title="Автоматизаций нет"
+          text="Правило срабатывает на событие, проверяет условие и выполняет действие — например уведомляет ревьюера."
+        />
+      )}
+
+      {(rules.data ?? []).map((r) => (
+        <section key={r.id} className="card card--pad rule">
+          <span className="rule__icon" style={{ color: r.iconFg }}>
+            <Icon name={r.icon} size={18} />
+          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</div>
+            <div className="rule__flow">
+              <span className="rule__chip">{r.triggerLabel}</span>
+              <Icon name="arrow_forward" size={13} color="var(--tx3)" />
+              <span className="rule__chip mono">{r.cond}</span>
+              <Icon name="arrow_forward" size={13} color="var(--tx3)" />
+              <span className="rule__chip">{r.action}</span>
+            </div>
+            <div className="rule__meta">
+              {r.queue ? `очередь ${r.queue}` : 'все очереди'} · {r.runs}
+              {r.lastRun && ` · последний ${r.lastRun}`}
+            </div>
+          </div>
+          <Toggle
+            on={r.on}
+            label={`Правило ${r.name}`}
+            onClick={() =>
+              manage &&
+              void patch
+                .mutateAsync({ id: r.id, body: { enabled: !r.on } })
+                .then(() => toast(r.on ? 'Правило выключено' : 'Правило включено', r.name, 'info'))
+                .catch(toastError)
+            }
+          />
+          {manage && (
+            <button
+              type="button"
+              className="btn btn--icon-quiet"
+              aria-label="Удалить правило"
+              onClick={() => void drop.mutateAsync(r.id).catch(toastError)}
+            >
+              <Icon name="close" size={16} />
+            </button>
+          )}
+        </section>
+      ))}
+
+      {creating && (
+        <RuleDialog
+          queues={(queues.data ?? []).map((q) => q.key)}
+          busy={create.isPending}
+          onClose={() => setCreating(false)}
+          onSave={async (body) => {
+            try {
+              await create.mutateAsync(body)
+              toast('Правило создано', String(body.name), 'ok')
+              setCreating(false)
+            } catch (err) {
+              toastError(err)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function RuleDialog({
+  queues,
+  busy,
+  onClose,
+  onSave,
+}: {
+  queues: string[]
+  busy: boolean
+  onClose: () => void
+  onSave: (body: Record<string, unknown>) => void
+}) {
+  const [name, setName] = useState('')
+  const [trigger, setTrigger] = useState('status_changed')
+  const [queue, setQueue] = useState('')
+  const [field, setField] = useState('status')
+  const [value, setValue] = useState('Review')
+  const [actionType, setActionType] = useState('notify')
+  const [actionValue, setActionValue] = useState('')
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div
+        className="modal"
+        style={{ width: 560, maxWidth: '94vw' }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Новое правило"
+      >
+        <div className="modal__head">
+          <Icon name="bolt" size={18} color="var(--ac)" />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Новое правило</div>
+          <button type="button" className="btn btn--icon-quiet spacer" onClick={onClose} aria-label="Закрыть">
+            <Icon name="close" size={17} />
+          </button>
+        </div>
+
+        <div className="modal__body">
+          <label className="label">
+            <span>Название</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          </label>
+
+          <div className="grid-2">
+            <label className="label">
+              <span>Когда</span>
+              <select className="select" value={trigger} onChange={(e) => setTrigger(e.target.value)}>
+                <option value="task_created">задача создана</option>
+                <option value="status_changed">сменился статус</option>
+                <option value="task_closed">задача закрыта</option>
+                <option value="schedule">ежедневно</option>
+              </select>
+            </label>
+            <label className="label">
+              <span>Очередь</span>
+              <select className="select" value={queue} onChange={(e) => setQueue(e.target.value)}>
+                <option value="">все очереди</option>
+                {queues.map((q) => (
+                  <option key={q} value={q}>
+                    {q}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid-2">
+            <label className="label">
+              <span>Если поле</span>
+              <select className="select" value={field} onChange={(e) => setField(e.target.value)}>
+                <option value="status">статус</option>
+                <option value="category">категория статуса</option>
+                <option value="priority">приоритет</option>
+                <option value="tags">тег</option>
+                <option value="overdue">просрочено</option>
+                <option value="subtasksAllDone">все подзадачи закрыты</option>
+              </select>
+            </label>
+            <label className="label">
+              <span>Равно</span>
+              <input
+                className="input"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={field === 'overdue' ? 'true' : 'Review'}
+              />
+            </label>
+          </div>
+
+          <div className="grid-2">
+            <label className="label">
+              <span>То сделать</span>
+              <select className="select" value={actionType} onChange={(e) => setActionType(e.target.value)}>
+                <option value="notify">уведомить</option>
+                <option value="set_priority">сменить приоритет</option>
+                <option value="set_status">сменить статус</option>
+                <option value="set_assignee">назначить исполнителя</option>
+                <option value="add_tag">добавить тег</option>
+                <option value="add_comment">добавить комментарий</option>
+              </select>
+            </label>
+            <label className="label">
+              <span>Значение</span>
+              <input
+                className="input"
+                value={actionValue}
+                onChange={(e) => setActionValue(e.target.value)}
+                placeholder={actionType === 'notify' ? 'текст уведомления' : 'high / Done / код участника'}
+              />
+            </label>
           </div>
         </div>
-        {WF_TABS.map((t) => (
-          <button
-            key={t.k}
-            type="button"
-            className={tab === t.k ? 'filter-item filter-item--on' : 'filter-item'}
-            onClick={() => setTab(t.k)}
-          >
-            <Icon name={t.icon} size={16} color={tab === t.k ? 'var(--ac)' : 'var(--tx3)'} />
-            {t.label}
+
+        <div className="modal__foot">
+          <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
+            Отмена
           </button>
-        ))}
-      </aside>
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            disabled={busy || !name.trim()}
+            onClick={() =>
+              onSave({
+                name,
+                trigger,
+                queue: queue || null,
+                condition: {
+                  all: [
+                    {
+                      field,
+                      op: field === 'overdue' || field === 'subtasksAllDone' ? 'is' : field === 'tags' ? 'contains' : 'eq',
+                      value: field === 'overdue' || field === 'subtasksAllDone' ? true : value,
+                    },
+                  ],
+                },
+                actions: [
+                  actionType === 'notify'
+                    ? { type: 'notify', role: 'watchers', value: actionValue || undefined }
+                    : { type: actionType, value: actionValue },
+                ],
+              })
+            }
+          >
+            Создать
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      <div style={{ padding: '14px 16px 30px', minWidth: 0 }}>
-        {tab === 'statuses' && (
-          <div>
-            <div className="page__head" style={{ flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Статусы и переходы</div>
-              <Segmented options={VIEWS} value={view} onChange={setView} />
-              <span className="page__note">
-                схема применяется ко всем задачам очереди
+/* ── Шаблоны ──────────────────────────────────────────────────────────── */
+
+function TemplatesTab({ manage }: { manage: boolean }) {
+  const templates = useTemplates()
+  const { toastError } = useApp()
+  const drop = useApiMutation<string, unknown>((id) => api.del(`/api/templates/${id}`), ['workflow'])
+
+  return (
+    <div className="cards-grid">
+      {(templates.data ?? []).map((t) => (
+        <section key={t.id} className="card card--pad">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name={t.icon} size={18} color="var(--ac)" />
+            <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{t.name}</div>
+            {manage && (
+              <button
+                type="button"
+                className="btn btn--icon-quiet"
+                aria-label="Удалить шаблон"
+                onClick={() => void drop.mutateAsync(t.id).catch(toastError)}
+              >
+                <Icon name="close" size={15} />
+              </button>
+            )}
+          </div>
+          <p className="pretty" style={{ fontSize: 12, color: 'var(--tx2)', margin: '8px 0 0' }}>
+            {t.note}
+          </p>
+          <div className="tagline tagline--tight" style={{ marginTop: 8 }}>
+            {t.tags.map((tag) => (
+              <span key={tag} className="tag">
+                {tag}
               </span>
-              <button
-                type="button"
-                className="btn btn--primary spacer"
-                onClick={() => toast('Статус добавлен', 'Новый статус в конце цепочки')}
-              >
-                <Icon name="add" size={16} />
-                Статус
-              </button>
-            </div>
-
-            {view === 'schema' ? (
-              <div
-                className="split"
-                style={{ gridTemplateColumns: 'minmax(0,1fr) 272px' }}
-              >
-                <section className="card" style={{ padding: 16, overflowX: 'auto' }}>
-                  <div className="wf-canvas">
-                    {WF_EDGES.map((e, i) => (
-                      <div
-                        key={i}
-                        className="wf-edge"
-                        style={{ left: e.left, top: e.top, width: e.w, height: e.h }}
-                      />
-                    ))}
-                    {WF_NODES.map((n) => {
-                      const st = ST[n.id as StatusName]
-                      const on = selected === n.id
-                      return (
-                        <button
-                          key={n.id}
-                          type="button"
-                          className="wf-node"
-                          style={{
-                            left: n.left,
-                            top: n.top,
-                            background: on ? st.bg : 'var(--surface)',
-                            color: on ? st.fg : 'var(--tx)',
-                            borderColor: on ? 'var(--ac)' : 'var(--border)',
-                            boxShadow: on ? 'var(--sh2)' : 'var(--sh1)',
-                          }}
-                          onClick={() => setSelected(n.id as StatusName)}
-                        >
-                          <span className="badge__dot" style={{ background: st.dot, width: 6, height: 6 }} />
-                          {n.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      marginTop: 12,
-                      fontSize: 11.5,
-                      color: 'var(--tx3)',
-                    }}
-                  >
-                    <span>Нажмите на статус, чтобы настроить входящие и исходящие переходы</span>
-                    <span className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 14, height: 2, background: 'var(--border2)' }} />
-                      переход
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 14, height: 2, background: 'var(--ac)' }} />
-                      выбранный
-                    </span>
-                  </div>
-                </section>
-
-                <aside className="card card--pad">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
-                    <StatusBadge status={selected} dot={false} />
-                    <span style={{ fontSize: 12, color: 'var(--tx3)' }}>переход</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-                    {INSPECTOR.map((wi) => (
-                      <div key={wi.title}>
-                        <div className="vk-eyebrow" style={{ marginBottom: 5 }}>
-                          {wi.title}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                          {wi.items.map((it) => (
-                            <span
-                              key={it.label}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                height: 23,
-                                padding: '0 8px',
-                                borderRadius: 6,
-                                background: 'var(--surface2)',
-                                border: '1px solid var(--border)',
-                                fontSize: 11.5,
-                                color: 'var(--tx2)',
-                              }}
-                            >
-                              <Icon name={it.icon} size={14} color={it.fg} />
-                              {it.label}
-                            </span>
-                          ))}
-                          <button
-                            type="button"
-                            className="btn btn--dashed"
-                            style={{ height: 23, padding: '0 7px', fontSize: 11.5 }}
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </aside>
-              </div>
-            ) : (
-              <>
-                <section className="card" style={{ padding: 14, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {FLOW.map((s, i) => (
-                      <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span
-                          className="wf-pill"
-                          style={{ background: ST[s].bg, color: ST[s].fg, borderColor: 'transparent' }}
-                        >
-                          <span
-                            className="badge__dot"
-                            style={{ background: ST[s].dot, width: 6, height: 6 }}
-                          />
-                          {s}
-                        </span>
-                        {i < FLOW.length - 1 && (
-                          <Icon name="arrow_forward" size={16} color="var(--border2)" />
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="card card--clip">
-                  <div
-                    className="thead"
-                    style={{
-                      gridTemplateColumns: '28px 150px 172px minmax(0,1fr) 132px 30px',
-                      gap: 10,
-                      padding: '0 13px',
-                    }}
-                  >
-                    <span />
-                    <span>Из статуса</span>
-                    <span>В статус</span>
-                    <span>Условие</span>
-                    <span>Кто может</span>
-                    <span />
-                  </div>
-                  {TRANSITIONS.map((tr, i) => (
-                    <div
-                      key={i}
-                      className="row row--static"
-                      style={{
-                        gridTemplateColumns: '28px 150px 172px minmax(0,1fr) 132px 30px',
-                        gap: 10,
-                        height: 38,
-                      }}
-                    >
-                      <Icon name="drag_indicator" size={16} color="var(--border2)" />
-                      <StatusBadge status={tr.from} dot={false} />
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <Icon name="arrow_forward" size={15} color="var(--tx3)" />
-                        <StatusBadge status={tr.to} dot={false} />
-                      </span>
-                      <span className="ellipsis" style={{ fontSize: 12, color: 'var(--tx2)' }}>
-                        {tr.cond}
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{tr.role}</span>
-                      <button
-                        type="button"
-                        className="btn btn--icon-quiet"
-                        style={{ width: 20, height: 20, justifySelf: 'center' }}
-                        aria-label="Изменить переход"
-                      >
-                        <Icon name="edit" size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </section>
-              </>
-            )}
+            ))}
           </div>
-        )}
+        </section>
+      ))}
+    </div>
+  )
+}
 
-        {tab === 'fields' && (
-          <div>
-            <div className="page__head">
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Поля задачи</div>
-              <button
-                type="button"
-                className="btn btn--primary spacer"
-                onClick={() => toast('Поле добавлено', 'Настройте тип и обязательность')}
-              >
-                <Icon name="add" size={16} />
-                Поле
-              </button>
-            </div>
-            <section className="card card--clip">
-              <div
-                className="thead"
-                style={{
-                  gridTemplateColumns: '28px minmax(0,1fr) 148px 116px 96px 84px',
-                  gap: 10,
-                  padding: '0 13px',
-                }}
-              >
-                <span />
-                <span>Поле</span>
-                <span>Тип</span>
-                <span>Обязательное</span>
-                <span>В карточке</span>
-                <span>Экран</span>
-              </div>
-              {TASK_FIELDS.map((tf) => (
-                <div
-                  key={tf.id}
-                  className="row row--static"
-                  style={{
-                    gridTemplateColumns: '28px minmax(0,1fr) 148px 116px 96px 84px',
-                    gap: 10,
-                    height: 38,
-                  }}
-                >
-                  <Icon name="drag_indicator" size={16} color="var(--border2)" />
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Icon name={tf.icon} size={16} color="var(--tx3)" />
-                    <span style={{ fontSize: 12.5 }}>{tf.label}</span>
-                  </span>
-                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
-                    {tf.type}
-                  </span>
-                  <Toggle
-                    on={Boolean(fieldReq[tf.id])}
-                    onClick={() => toggleField(tf.id, 'req')}
-                    label={`${tf.label}: обязательное поле`}
-                  />
-                  <Toggle
-                    on={Boolean(fieldCard[tf.id])}
-                    onClick={() => toggleField(tf.id, 'card')}
-                    label={`${tf.label}: показывать в карточке`}
-                  />
-                  <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{tf.screen}</span>
-                </div>
+/* ── Колонки доски ────────────────────────────────────────────────────── */
+
+function BoardTab({ manage }: { manage: boolean }) {
+  const board = useBoard()
+  const { toast, toastError } = useApp()
+  const patch = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.patch(`/api/board/columns/${id}`, body),
+    ['board'],
+  )
+
+  return (
+    <section className="card card--clip">
+      <div className="thead" style={{ gridTemplateColumns: '160px minmax(0,1fr) 120px', gap: 10, padding: '0 13px' }}>
+        <span>Колонка</span>
+        <span>Статусы</span>
+        <span>Лимит WIP</span>
+      </div>
+
+      {(board.data?.columns ?? []).map((c) => (
+        <div key={c.id} className="row row--static" style={{ gridTemplateColumns: '160px minmax(0,1fr) 120px', gap: 10 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 500 }}>{c.name}</span>
+          <span className="tagline tagline--tight">
+            {c.statuses.map((s) => (
+              <span key={s} className="tag">
+                {s}
+              </span>
+            ))}
+          </span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={99}
+            defaultValue={c.wipLimit}
+            disabled={!manage}
+            onBlur={(e) => {
+              const value = Number(e.target.value)
+              if (value !== c.wipLimit) {
+                void patch
+                  .mutateAsync({ id: c.id, body: { wipLimit: value } })
+                  .then(() => toast('Лимит обновлён', `${c.name}: ${value || 'без лимита'}`, 'ok'))
+                  .catch(toastError)
+              }
+            }}
+          />
+        </div>
+      ))}
+
+      <p className="report__hint" style={{ padding: '10px 13px' }}>
+        Ноль означает «без лимита». Превышение подсвечивается в шапке колонки на доске.
+      </p>
+    </section>
+  )
+}
+
+/* ── Участники ────────────────────────────────────────────────────────── */
+
+function PeopleTab() {
+  const { list, can, me } = useSession()
+  const { toast, toastError } = useApp()
+  const manage = can('people.manage')
+  const invites = useInvites(manage)
+
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<AccessRole>('member')
+
+  const patchUser = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.patch(`/api/people/${id}`, body),
+    ['people'],
+  )
+  const invite = useApiMutation<Record<string, unknown>, { token: string }>(
+    (body) => api.post('/api/invites', body),
+    ['invites'],
+  )
+  const dropInvite = useApiMutation<string, unknown>((id) => api.del(`/api/invites/${id}`), ['invites'])
+
+  const GRID = '30px minmax(0,1fr) 180px 130px 110px'
+
+  return (
+    <div className="stack">
+      <section className="card card--clip">
+        <div className="thead" style={{ gridTemplateColumns: GRID, gap: 10, padding: '0 13px' }}>
+          <span />
+          <span>Участник</span>
+          <span>Почта</span>
+          <span>Роль</span>
+          <span>Активен</span>
+        </div>
+
+        {list.map((p) => (
+          <div key={p.id} className="row row--static" style={{ gridTemplateColumns: GRID, gap: 10 }}>
+            <Avatar id={p.code} size="md" title={false} />
+            <span style={{ minWidth: 0 }}>
+              <span className="ellipsis" style={{ display: 'block', fontSize: 12.5 }}>
+                {p.name}
+                {p.id === me?.id && <span className="field__sys">это вы</span>}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{p.role}</span>
+            </span>
+            <span className="ellipsis" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
+              {p.email}
+            </span>
+            <select
+              className="select"
+              value={p.accessRole}
+              disabled={!manage}
+              onChange={(e) =>
+                void patchUser
+                  .mutateAsync({ id: p.id, body: { role: e.target.value } })
+                  .then(() => toast('Роль изменена', `${p.name}: ${ROLE_LABEL[e.target.value]}`, 'ok'))
+                  .catch(toastError)
+              }
+            >
+              {(['admin', 'manager', 'member', 'viewer'] as AccessRole[]).map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABEL[r]}
+                </option>
               ))}
-            </section>
+            </select>
+            <Toggle
+              on={p.active}
+              label={`Доступ для ${p.name}`}
+              onClick={() =>
+                manage &&
+                void patchUser.mutateAsync({ id: p.id, body: { active: !p.active } }).catch(toastError)
+              }
+            />
           </div>
-        )}
+        ))}
+      </section>
 
-        {tab === 'roles' && (
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 11 }}>
-              Роли и права доступа
-            </div>
-            <section className="card card--clip">
-              <div
-                className="thead"
-                style={{
-                  gridTemplateColumns: `minmax(0,1fr) repeat(${ROLE_COLS.length},86px)`,
-                  height: 34,
-                  padding: '0 13px',
-                }}
-              >
-                <span>Право</span>
-                {ROLE_COLS.map((rc) => (
-                  <span key={rc} style={{ textAlign: 'center' }}>
-                    {rc}
-                  </span>
+      {manage && (
+        <section className="card card--pad">
+          <div className="card__title" style={{ marginBottom: 10 }}>
+            Пригласить участника
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label className="label" style={{ flex: 1, minWidth: 220 }}>
+              <span>Почта</span>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.ru"
+              />
+            </label>
+            <label className="label" style={{ width: 150 }}>
+              <span>Роль</span>
+              <select className="select" value={role} onChange={(e) => setRole(e.target.value as AccessRole)}>
+                {(['admin', 'manager', 'member', 'viewer'] as AccessRole[]).map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
                 ))}
-              </div>
-              {PERMISSIONS.map((pm) => (
-                <div
-                  key={pm.id}
-                  className="row row--static"
-                  style={{
-                    gridTemplateColumns: `minmax(0,1fr) repeat(${ROLE_COLS.length},86px)`,
-                    gap: 8,
-                  }}
-                >
-                  <span style={{ fontSize: 12.5 }}>{pm.label}</span>
-                  {(perms[pm.id] ?? pm.cells).map((cell, i) => (
-                    <span key={i} style={{ display: 'flex', justifyContent: 'center' }}>
-                      <Checkbox
-                        small
-                        on={cell}
-                        onClick={() => togglePerm(pm.id, i)}
-                        label={`${pm.label} — ${ROLE_COLS[i]}`}
-                      />
-                    </span>
-                  ))}
-                </div>
-              ))}
-            </section>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={!email.trim() || invite.isPending}
+              onClick={() =>
+                void invite
+                  .mutateAsync({ email, role })
+                  .then(() => {
+                    setEmail('')
+                    toast('Приглашение создано', 'Скопируйте ссылку из списка ниже', 'ok')
+                  })
+                  .catch(toastError)
+              }
+            >
+              Пригласить
+            </button>
           </div>
-        )}
 
-        {tab === 'auto' && (
-          <div>
-            <div className="page__head">
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Автоматизации</div>
-              <span className="page__note">триггер → условие → действие</span>
-              <button
-                type="button"
-                className="btn btn--primary spacer"
-                onClick={() => setBuilderOpen(true)}
-              >
-                <Icon name="add" size={16} />
-                Правило
-              </button>
-            </div>
+          <p className="report__hint" style={{ marginTop: 8 }}>
+            Письма приложение не отправляет: скопируйте ссылку и передайте её человеку любым удобным способом.
+          </p>
 
-            {builderOpen && (
-              <div
-                className="card"
-                style={{
-                  borderColor: 'var(--ac-soft2)',
-                  boxShadow: 'var(--sh2)',
-                  padding: '13px 14px',
-                  marginBottom: 10,
-                  animation: 'vk-pop 170ms cubic-bezier(.2,.8,.3,1)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
-                  <Icon name="bolt" size={17} color="var(--ac)" />
-                  <input
-                    className="input"
-                    style={{ flex: 1, height: 30 }}
-                    value={ruleName}
-                    onChange={(e) => setRuleName(e.target.value)}
-                    placeholder="Название правила"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn--secondary"
-                    onClick={() => setBuilderOpen(false)}
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--primary"
-                    onClick={() => {
-                      setBuilderOpen(false)
-                      toast('Правило сохранено', ruleName.trim() || 'Без названия')
-                      setRuleName('')
-                    }}
-                  >
-                    Сохранить
-                  </button>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {BUILDER_BLOCKS.map((bb) => (
-                    <div
-                      key={bb.kind}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '74px minmax(0,1fr)',
-                        gap: 10,
-                        alignItems: 'start',
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          height: 24,
-                          borderRadius: 6,
-                          background: bb.bg,
-                          color: bb.fg,
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {bb.kind}
-                      </span>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {bb.rows.map((br) => (
-                          <div
-                            key={br.field}
-                            style={{ display: 'flex', alignItems: 'center', gap: 7 }}
-                          >
-                            <Icon name="drag_indicator" size={15} color="var(--border2)" />
-                            <span
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 7,
-                                flex: 1,
-                                minWidth: 0,
-                                height: 30,
-                                padding: '0 10px',
-                                background: 'var(--surface2)',
-                                border: '1px solid var(--border)',
-                                borderRadius: 7,
-                                fontSize: 12.5,
-                              }}
-                            >
-                              <Icon name={br.icon} size={15} color={br.icFg} />
-                              <span style={{ color: 'var(--tx3)', whiteSpace: 'nowrap' }}>
-                                {br.field}
-                              </span>
-                              <span className="ellipsis" style={{ fontWeight: 500 }}>
-                                {br.value}
-                              </span>
-                              <Icon
-                                name="expand_more"
-                                size={15}
-                                color="var(--tx3)"
-                                className="spacer"
-                              />
-                            </span>
-                            <button
-                              type="button"
-                              className="btn btn--icon-quiet"
-                              style={{ width: 20, height: 20 }}
-                              aria-label="Удалить строку"
-                            >
-                              <Icon name="close" size={16} />
-                            </button>
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          className="btn btn--dashed btn--sm"
-                          style={{ width: 'fit-content' }}
-                        >
-                          <Icon name="add" size={14} />
-                          {bb.addLabel}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {RULES.map((r) => {
-                const on = Boolean(ruleOn[r.id])
+          {(invites.data ?? []).length > 0 && (
+            <div className="invites">
+              {(invites.data ?? []).map((i) => {
+                const link = `${window.location.origin}/?invite=${i.token}`
                 return (
-                  <div
-                    key={r.id}
-                    className="card"
-                    style={{ padding: '12px 13px' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                      <Icon name={r.icon} size={17} color={r.iconFg} />
-                      <div style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>
-                        {r.name}
-                      </div>
-                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>
-                        {r.runs}
-                      </span>
-                      <Toggle
-                        on={on}
-                        onClick={() => {
-                          toggleRule(r.id)
-                          toast(
-                            on ? 'Правило выключено' : 'Правило включено',
-                            r.name,
-                            on ? 'warn' : 'ok',
-                          )
-                        }}
-                        label={r.name}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 7,
-                        marginTop: 9,
-                        flexWrap: 'wrap',
-                        opacity: on ? 1 : 0.5,
-                        transition: 'opacity 180ms ease',
+                  <div key={i.id} className="invite">
+                    <Icon name="mail" size={16} color="var(--tx2)" />
+                    <span style={{ fontSize: 12, minWidth: 0, flex: 1 }} className="ellipsis">
+                      {i.email} · {ROLE_LABEL[i.role]}
+                      {i.expired && <span style={{ color: 'var(--dang)' }}> · истекло</span>}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--sm"
+                      onClick={() => {
+                        void navigator.clipboard
+                          .writeText(link)
+                          .then(() => toast('Ссылка скопирована', i.email, 'ok'))
+                          .catch(() => toast('Не удалось скопировать', link, 'warn'))
                       }}
                     >
-                      <span
-                        className="badge"
-                        style={{ background: 'var(--ac-soft)', color: 'var(--ac-tx)', height: 24 }}
-                      >
-                        <Icon name="bolt" size={14} />
-                        {r.trigger}
-                      </span>
-                      <Icon name="arrow_forward" size={15} color="var(--border2)" />
-                      <span
-                        className="badge"
-                        style={{
-                          background: 'var(--surface2)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--tx2)',
-                          height: 24,
-                        }}
-                      >
-                        {r.cond}
-                      </span>
-                      <Icon name="arrow_forward" size={15} color="var(--border2)" />
-                      <span
-                        className="badge"
-                        style={{ background: 'var(--ok-bg)', color: 'var(--ok)', height: 24 }}
-                      >
-                        {r.action}
-                      </span>
-                    </div>
+                      Скопировать ссылку
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--icon-quiet"
+                      aria-label="Отозвать приглашение"
+                      onClick={() => void dropInvite.mutateAsync(i.id).catch(toastError)}
+                    >
+                      <Icon name="close" size={15} />
+                    </button>
                   </div>
                 )
               })}
             </div>
-          </div>
-        )}
-
-        {tab === 'templates' && (
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 11 }}>
-              Шаблоны задач
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill,minmax(268px,1fr))',
-                gap: 10,
-              }}
-            >
-              {TEMPLATES.map((tp) => (
-                <div
-                  key={tp.name}
-                  className="card card--hover"
-                  style={{ padding: '12px 13px' }}
-                  onClick={() => toast('Шаблон применён', tp.name, 'info')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Icon name={tp.icon} size={17} color="var(--ac)" />
-                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{tp.name}</div>
-                  </div>
-                  <div
-                    className="pretty"
-                    style={{
-                      fontSize: 11.5,
-                      color: 'var(--tx2)',
-                      marginTop: 7,
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {tp.note}
-                  </div>
-                  <div style={{ display: 'flex', gap: 5, marginTop: 9, flexWrap: 'wrap' }}>
-                    {tp.tags.map((tg) => (
-                      <span
-                        key={tg}
-                        className="tag"
-                        style={{ height: 19, padding: '0 7px' }}
-                      >
-                        {tg}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

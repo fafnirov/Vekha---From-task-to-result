@@ -1,73 +1,131 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Avatar, Icon, PriorityChip, Tag } from '../components/ui'
-import { findTask } from '../data/tasks'
-import type { PersonId } from '../data/types'
-import { useApp, type BoardColumnId } from '../store/app'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Avatar, Empty, Icon, PriorityChip, Tag } from '../components/ui'
+import { statusStyle } from '../data/catalog'
+import { useBoard, useMoveCard, useQueues, useSprints } from '../api/hooks'
 import { useUi } from '../store/ui'
+import { useApp } from '../store/app'
+import { useSession } from '../store/session'
 
-interface ColumnMeta {
-  id: BoardColumnId
-  name: string
-  limit: number | null
-  dot: string
-}
-
-const COLUMNS: ColumnMeta[] = [
-  { id: 'Backlog', name: 'Backlog', limit: null, dot: 'var(--tx3)' },
-  { id: 'To Do', name: 'To Do', limit: null, dot: 'var(--info)' },
-  { id: 'In Progress', name: 'In Progress', limit: 4, dot: 'var(--ac)' },
-  { id: 'Review', name: 'Review', limit: 3, dot: 'var(--warn)' },
-  { id: 'Done', name: 'Done', limit: null, dot: 'var(--ok)' },
-]
-
-const BOARD_MEMBERS: PersonId[] = ['AK', 'DS', 'MN', 'IV', 'EL']
+const FOLD_KEY = 'vekha.board.folded'
 
 export function Board() {
   const nav = useNavigate()
   const ui = useUi()
-  const { board, boardFold, toggleFold, moveCard, statusOf, toast } = useApp()
+  const { toast, toastError } = useApp()
+  const { can } = useSession()
+  const [params, setParams] = useSearchParams()
 
+  const queue = params.get('queue') ?? ''
+  const sprint = params.get('sprint') ?? ''
+  const assignee = params.get('assignee') ?? ''
+
+  const queues = useQueues()
+  const sprints = useSprints()
+  const board = useBoard({ queue: queue || undefined, sprint: sprint || undefined, assignee: assignee || undefined })
+  const move = useMoveCard()
+
+  const [folded, setFolded] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(FOLD_KEY) ?? '{}') as Record<string, boolean>
+    } catch {
+      return {}
+    }
+  })
   const [dragKey, setDragKey] = useState<string | null>(null)
-  const [overCol, setOverCol] = useState<BoardColumnId | null>(null)
+  const [overCol, setOverCol] = useState<string | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
 
-  const endDrag = () => {
+  const columns = board.data?.columns ?? []
+  const tasks = board.data?.tasks ?? {}
+
+  /* Аватары в шапке — те, у кого есть карточки на этой доске. */
+  const members = useMemo(() => {
+    const codes = new Set<string>()
+    for (const t of Object.values(tasks)) if (t.who) codes.add(t.who)
+    return [...codes].slice(0, 8)
+  }, [tasks])
+
+  function toggleFold(name: string) {
+    const next = { ...folded, [name]: !folded[name] }
+    setFolded(next)
+    window.localStorage.setItem(FOLD_KEY, JSON.stringify(next))
+  }
+
+  function endDrag() {
     setDragKey(null)
     setOverCol(null)
     setOverIdx(null)
   }
 
-  const drop = (col: ColumnMeta) => {
+  async function drop(columnName: string) {
     if (!dragKey) return
-    moveCard(dragKey, col.id, overIdx)
-    toast('Задача перенесена', `${dragKey} → ${col.name}`, col.id === 'Done' ? 'ok' : 'info')
+    const key = dragKey
+    const index = overIdx
     endDrag()
+
+    try {
+      await move.mutateAsync({ key, column: columnName, index })
+      toast('Задача перенесена', `${key} → ${columnName}`, columnName === 'Done' ? 'ok' : 'info')
+    } catch (err) {
+      // Воркфлоу может запретить переход — сообщаем причину и не двигаем карточку.
+      toastError(err, 'Перенос не выполнен')
+    }
   }
+
+  function setParam(key: string, value: string) {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setParams(next, { replace: true })
+  }
+
+  const boardTitle = queue
+    ? `Доска · ${queues.data?.find((q) => q.key === queue)?.name ?? queue}`
+    : 'Доска · вся организация'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '11px 16px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--workspace)',
-          flex: 'none',
-        }}
-      >
-        <div className="page__title">Доска · Продуктовая команда</div>
-        <span className="badge" style={{ background: 'var(--ac-soft)', color: 'var(--ac-tx)' }}>
-          Sprint 24
-        </span>
-        <span className="av-stack" style={{ marginLeft: 8 }}>
-          {BOARD_MEMBERS.map((m) => (
-            <Avatar key={m} id={m} size="md" />
+      <div className="board__bar">
+        <div className="page__title">{boardTitle}</div>
+
+        <select className="select select--sm" value={queue} onChange={(e) => setParam('queue', e.target.value)}>
+          <option value="">Все очереди</option>
+          {(queues.data ?? []).map((q) => (
+            <option key={q.id} value={q.key}>
+              {q.key}
+            </option>
           ))}
-        </span>
+        </select>
+
+        <select className="select select--sm" value={sprint} onChange={(e) => setParam('sprint', e.target.value)}>
+          <option value="">Все спринты</option>
+          {(sprints.data ?? []).map((s) => (
+            <option key={s.id} value={s.name}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+
+        {members.length > 0 && (
+          <span className="av-stack" style={{ marginLeft: 4 }}>
+            {members.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="av-stack__btn"
+                onClick={() => setParam('assignee', assignee === m ? '' : m)}
+                title="Показать только задачи участника"
+                style={{ opacity: assignee && assignee !== m ? 0.4 : 1 }}
+              >
+                <Avatar id={m} size="md" />
+              </button>
+            ))}
+          </span>
+        )}
+
         <div className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {board.isFetching && <Icon name="progress_activity" size={16} color="var(--tx3)" />}
           <button type="button" className="btn btn--secondary" onClick={() => nav('/filters')}>
             <Icon name="filter_alt" size={16} />
             Фильтры
@@ -83,83 +141,53 @@ export function Board() {
         </div>
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          padding: '12px 16px 16px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            height: '100%',
-            alignItems: 'stretch',
-            minWidth: 'max-content',
-          }}
-        >
-          {COLUMNS.map((col) => {
-            const keys = board[col.id]
-            const folded = Boolean(boardFold[col.id])
-            const over = overCol === col.id && Boolean(dragKey)
-            const exceeded = col.limit !== null && keys.length > col.limit
+      <div className="board__scroll">
+        {!board.isLoading && columns.length === 0 && (
+          <Empty
+            icon="view_kanban"
+            title="Колонок нет"
+            text="Настройте колонки доски в разделе «Настройки» — каждая колонка собирает свои статусы."
+          />
+        )}
+
+        <div className="board__cols">
+          {columns.map((col) => {
+            const keys = col.keys
+            const isFolded = Boolean(folded[col.name])
+            const over = overCol === col.name && Boolean(dragKey)
+            const exceeded = col.wipLimit > 0 && keys.length > col.wipLimit
+            const dot = statusStyle(col.statuses[0] ?? '').dot
 
             return (
               <div
                 key={col.id}
                 className="bcol"
                 style={{
-                  width: folded ? 52 : 278,
+                  width: isFolded ? 52 : 278,
                   background: over ? 'var(--ac-soft)' : 'var(--surface2)',
                   borderColor: over ? 'var(--ac)' : 'var(--border)',
                 }}
                 onDragOver={(e) => {
                   e.preventDefault()
-                  if (overCol !== col.id) {
-                    setOverCol(col.id)
+                  if (overCol !== col.name) {
+                    setOverCol(col.name)
                     setOverIdx(null)
                   }
                 }}
                 onDragLeave={() => {
-                  if (overCol === col.id) setOverCol(null)
+                  if (overCol === col.name) setOverCol(null)
                 }}
                 onDrop={(e) => {
                   e.preventDefault()
-                  drop(col)
+                  void drop(col.name)
                 }}
               >
-                <div
-                  className="bcol__head"
-                  style={{ background: over ? 'var(--ac-soft)' : 'transparent' }}
-                >
-                  {!folded ? (
+                <div className="bcol__head" style={{ background: over ? 'var(--ac-soft)' : 'transparent' }}>
+                  {!isFolded ? (
                     <>
-                      <span
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 7,
-                          minWidth: 0,
-                          flex: 1,
-                        }}
-                      >
-                        <Icon
-                          name="drag_indicator"
-                          size={16}
-                          color="var(--border2)"
-                          title="Перетащите, чтобы изменить порядок колонок"
-                        />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: 1 }}>
                         <span
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: '50%',
-                            background: col.dot,
-                            flex: 'none',
-                          }}
+                          style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flex: 'none' }}
                         />
                         <span className="ellipsis" style={{ fontSize: 12.5, fontWeight: 600 }}>
                           {col.name}
@@ -172,15 +200,10 @@ export function Board() {
                           }}
                         >
                           {keys.length}
-                          {col.limit !== null ? ` / ${col.limit}` : ''}
+                          {col.wipLimit > 0 ? ` / ${col.wipLimit}` : ''}
                         </span>
                         {exceeded && (
-                          <Icon
-                            name="warning"
-                            size={15}
-                            color="var(--warn)"
-                            title="Превышен лимит WIP"
-                          />
+                          <Icon name="warning" size={15} color="var(--warn)" title="Превышен лимит WIP" />
                         )}
                       </span>
                       <button
@@ -188,7 +211,7 @@ export function Board() {
                         className="btn btn--icon-quiet"
                         style={{ width: 20, height: 20 }}
                         title="Свернуть колонку"
-                        onClick={() => toggleFold(col.id)}
+                        onClick={() => toggleFold(col.name)}
                       >
                         <Icon name="left_panel_close" size={16} />
                       </button>
@@ -198,40 +221,31 @@ export function Board() {
                       type="button"
                       className="bcol__folded"
                       title="Развернуть колонку"
-                      onClick={() => toggleFold(col.id)}
+                      onClick={() => toggleFold(col.name)}
                     >
                       <Icon name="left_panel_open" size={16} />
                       <span className="count-pill">{keys.length}</span>
-                      <span
-                        style={{
-                          writingMode: 'vertical-rl',
-                          fontSize: 12,
-                          fontWeight: 600,
-                        }}
-                      >
+                      <span style={{ writingMode: 'vertical-rl', fontSize: 12, fontWeight: 600 }}>
                         {col.name}
                       </span>
                     </button>
                   )}
                 </div>
 
-                {!folded && (
+                {!isFolded && (
                   <div className="bcol__body">
                     {keys.map((k, i) => {
-                      const t = findTask(k)
-                      const status = statusOf(k)
+                      const t = tasks[k]
+                      if (!t) return null
                       const dragging = dragKey === k
-                      const showLine =
-                        Boolean(dragKey) &&
-                        overCol === col.id &&
-                        overIdx === i &&
-                        dragKey !== k
+                      const showLine = Boolean(dragKey) && overCol === col.name && overIdx === i && dragKey !== k
+
                       return (
                         <div key={k} style={{ display: 'contents' }}>
                           {showLine && <div className="drop-line" />}
                           <article
                             className="bcard"
-                            draggable
+                            draggable={can('task.status')}
                             onDragStart={(e) => {
                               e.dataTransfer.effectAllowed = 'move'
                               setDragKey(k)
@@ -240,8 +254,8 @@ export function Board() {
                             onDragOver={(e) => {
                               e.preventDefault()
                               e.stopPropagation()
-                              if (overCol !== col.id || overIdx !== i) {
-                                setOverCol(col.id)
+                              if (overCol !== col.name || overIdx !== i) {
+                                setOverCol(col.name)
                                 setOverIdx(i)
                               }
                             }}
@@ -252,74 +266,51 @@ export function Board() {
                               transform: dragging ? 'scale(1.01) rotate(-0.3deg)' : 'none',
                             }}
                           >
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                marginBottom: 6,
-                              }}
-                            >
-                              <span
-                                className="mono"
-                                style={{ fontSize: 11, color: 'var(--tx3)' }}
-                              >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
                                 {t.key}
                               </span>
                               <PriorityChip priority={t.priority} small />
-                              {status === 'Blocked' && (
-                                <span
-                                  className="badge badge--sm"
-                                  style={{
-                                    background: 'var(--dang-bg)',
-                                    color: 'var(--dang)',
-                                    height: 17,
-                                    fontSize: 10,
-                                  }}
-                                >
+                              {t.statusCategory === 'blocked' && (
+                                <span className="badge badge--sm badge--block">
                                   <Icon name="block" size={12} />
-                                  blocked
+                                  {t.status.toLowerCase()}
                                 </span>
                               )}
-                              <span
-                                className="count-pill spacer"
-                                style={{ fontSize: 10.5 }}
-                              >
-                                {t.est} SP
-                              </span>
+                              {t.est > 0 && (
+                                <span className="count-pill spacer" style={{ fontSize: 10.5 }}>
+                                  {t.est} SP
+                                </span>
+                              )}
                             </div>
+
                             <div className="pretty" style={{ fontSize: 12.5, lineHeight: 1.4 }}>
                               {t.title}
                             </div>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                marginTop: 8,
-                              }}
-                            >
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
                               {t.tags.slice(0, 2).map((tg) => (
                                 <Tag key={tg} outline>
                                   {tg}
                                 </Tag>
                               ))}
-                              <span
-                                className="spacer"
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  color: 'var(--tx3)',
-                                  fontSize: 10.5,
-                                }}
-                              >
-                                <span
-                                  style={{ display: 'flex', alignItems: 'center', gap: 2 }}
-                                >
-                                  <Icon name="chat" size={13} />
-                                  {2 + (k.length % 4)}
-                                </span>
+                              <span className="bcard__foot spacer">
+                                {t.dueState && (
+                                  <span
+                                    style={{
+                                      color: t.dueState === 'over' ? 'var(--dang)' : 'var(--warn)',
+                                    }}
+                                    className="mono"
+                                  >
+                                    {t.due}
+                                  </span>
+                                )}
+                                {t.comments > 0 && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Icon name="chat" size={13} />
+                                    {t.comments}
+                                  </span>
+                                )}
                                 <Avatar id={t.who} size="sm" />
                               </span>
                             </div>
@@ -328,9 +319,9 @@ export function Board() {
                       )
                     })}
 
-                    {over && overIdx === null && (
-                      <div className="drop-zone">Перенести в {col.name}</div>
-                    )}
+                    {over && overIdx === null && <div className="drop-zone">Перенести в {col.name}</div>}
+
+                    {keys.length === 0 && !over && <div className="bcol__empty">Пусто</div>}
 
                     <button
                       type="button"

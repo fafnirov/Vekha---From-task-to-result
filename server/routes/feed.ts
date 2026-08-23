@@ -145,13 +145,15 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
         mentions.filter((m) => m.readAt === null && m.task).map((m) => m.task!.key),
       )
 
-      const attention: { key: string; kind: ReasonKind; meta: string }[] = []
+      const attention: { key: string; kind: ReasonKind; meta: string; task: ReturnType<typeof taskDto> }[] = []
       const seen = new Set<string>()
 
       const push = (key: string, kind: ReasonKind, meta: string) => {
         if (seen.has(key)) return
+        const row = allOpen.find((t) => t.key === key)
+        if (!row) return
         seen.add(key)
-        attention.push({ key, kind, meta })
+        attention.push({ key, kind, meta, task: taskDto(row, now) })
       }
 
       for (const t of allOpen) {

@@ -1,60 +1,140 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Avatar, Icon, PriorityChip, Progress, StatusBadge, TaskKey } from '../components/ui'
-import { PEOPLE } from '../data/catalog'
-import { findTask } from '../data/tasks'
-import type { PersonId } from '../data/types'
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Avatar, Empty, Icon, PriorityChip, Progress, StatusBadge, TaskKey } from '../components/ui'
+import { dueColor } from '../data/catalog'
+import { api } from '../api/client'
+import { useApiMutation, usePlanning, useQueues } from '../api/hooks'
+import { useSession } from '../store/session'
+import { useUi } from '../store/ui'
 import { useApp } from '../store/app'
+import type { Task } from '../data/types'
 
-const CAPACITY = 52
-
-const LOAD: { id: PersonId; sp: number; cap: number }[] = [
-  { id: 'AK', sp: 13, cap: 15 },
-  { id: 'DS', sp: 18, cap: 16 },
-  { id: 'MN', sp: 8, cap: 12 },
-  { id: 'IV', sp: 5, cap: 10 },
-]
+const SPRINT_GRID = '20px 88px minmax(0,1fr) 30px 116px 26px 46px 26px'
 
 export function Backlog() {
   const nav = useNavigate()
-  const {
-    sprintKeys,
-    backlogKeys,
-    statusOf,
-    addToSprint,
-    removeFromSprint,
-    toast,
-  } = useApp()
+  const ui = useUi()
+  const { can } = useSession()
+  const { toast, toastError } = useApp()
+  const [params, setParams] = useSearchParams()
+
+  const queue = params.get('queue') ?? ''
+  const sprintName = params.get('sprint') ?? ''
+
+  const queues = useQueues()
+  const planning = usePlanning({ queue: queue || undefined, sprint: sprintName || undefined })
 
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [overSprint, setOverSprint] = useState(false)
+  const [creating, setCreating] = useState(false)
 
-  const points = useMemo(
-    () => sprintKeys.reduce((sum, k) => sum + findTask(k).est, 0),
-    [sprintKeys],
+  const sprint = planning.data?.sprint ?? null
+  const sprintTasks = planning.data?.sprintTasks ?? []
+  const backlog = planning.data?.backlog ?? []
+  const people = planning.data?.people ?? []
+  const summary = planning.data?.summary
+
+  const addToSprint = useApiMutation<{ id: string; key: string }, unknown>(
+    ({ id, key }) => api.post(`/api/sprints/${id}/tasks`, { key }),
+    ['sprints', 'tasks', 'board'],
   )
-  const pct = Math.min(100, Math.round((points / CAPACITY) * 100))
-  const pctColor = pct > 100 ? 'var(--dang)' : pct > 85 ? 'var(--warn)' : 'var(--ac)'
-  const avg = sprintKeys.length ? (points / sprintKeys.length).toFixed(1) : '0'
+  const removeFromSprint = useApiMutation<{ id: string; key: string }, unknown>(
+    ({ id, key }) => api.del(`/api/sprints/${id}/tasks/${key}`),
+    ['sprints', 'tasks', 'board'],
+  )
+  const patchSprint = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.patch(`/api/sprints/${id}`, body),
+    ['sprints'],
+  )
+  const closeSprint = useApiMutation<{ id: string; moveTo: string | null }, { moved: number }>(
+    ({ id, moveTo }) => api.post(`/api/sprints/${id}/close`, { moveTo }),
+    ['sprints', 'tasks', 'board'],
+  )
+  const createSprint = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.post('/api/sprints', body),
+    ['sprints'],
+  )
 
-  const add = (key: string) => {
-    addToSprint(key)
-    toast('Добавлено в Sprint 25', `${key} · ${findTask(key).est} SP`)
+  const planned = summary?.planned ?? 0
+  const capacity = summary?.capacity ?? 0
+  const pct = capacity ? Math.round((planned / capacity) * 100) : 0
+  const pctColor = pct > 100 ? 'var(--dang)' : pct > 85 ? 'var(--warn)' : 'var(--ac)'
+
+  async function add(key: string) {
+    if (!sprint) {
+      toast('Нет активного спринта', 'Сначала создайте спринт', 'warn')
+      return
+    }
+    try {
+      await addToSprint.mutateAsync({ id: sprint.id, key })
+      toast(`Добавлено в ${sprint.name}`, key, 'ok')
+    } catch (err) {
+      toastError(err)
+    }
   }
 
+  async function drop(key: string) {
+    if (!sprint) {
+      toast('Нет активного спринта', 'Сначала создайте спринт', 'warn')
+      return
+    }
+    try {
+      await removeFromSprint.mutateAsync({ id: sprint.id, key })
+      toast('Возвращено в бэклог', key, 'info')
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
+  function setParam(key: string, value: string) {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setParams(next, { replace: true })
+  }
+
+  const manage = can('sprint.manage')
+
   return (
-    <div
-      className="split"
-      style={{ gridTemplateColumns: 'minmax(0,1fr) 288px', minHeight: '100%', gap: 0 }}
-    >
+    <div className="split" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px', minHeight: '100%', gap: 0 }}>
       <div style={{ padding: '14px 16px 30px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
           <div className="page__title">Планирование спринта</div>
+
+          <select className="select select--sm" value={queue} onChange={(e) => setParam('queue', e.target.value)}>
+            <option value="">Все очереди</option>
+            {(queues.data ?? []).map((q) => (
+              <option key={q.id} value={q.key}>
+                {q.key}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="select select--sm"
+            value={sprint?.name ?? ''}
+            onChange={(e) => setParam('sprint', e.target.value)}
+          >
+            <option value="">Активный спринт</option>
+            {(planning.data?.sprints ?? []).map((s) => (
+              <option key={s.id} value={s.name}>
+                {s.name} · {s.state}
+              </option>
+            ))}
+          </select>
+
+          {manage && (
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => setCreating(true)}>
+              <Icon name="add" size={15} />
+              Спринт
+            </button>
+          )}
           <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
             перетащите задачи из бэклога в спринт
           </span>
         </div>
 
+        {/* ── Спринт ─────────────────────────────────────────────────── */}
         <section
           className="card"
           style={{
@@ -70,302 +150,422 @@ export function Backlog() {
           onDragLeave={() => setOverSprint(false)}
           onDrop={(e) => {
             e.preventDefault()
-            if (dragKey) add(dragKey)
+            if (dragKey) void add(dragKey)
             setDragKey(null)
             setOverSprint(false)
           }}
         >
           <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 9,
-              padding: '10px 12px',
-              background: overSprint ? 'var(--ac-soft)' : 'var(--surface2)',
-              borderBottom: '1px solid var(--border)',
-              transition: 'background 180ms ease',
-            }}
+            className="sprint__head"
+            style={{ background: overSprint ? 'var(--ac-soft)' : 'var(--surface2)' }}
           >
             <Icon name="rotate_right" size={17} color="var(--ac)" />
-            <div className="card__title">Sprint 25</div>
-            <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>1 – 14 сентября</span>
+            <div className="card__title">{sprint?.name ?? 'Спринт не выбран'}</div>
+            {sprint && <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{sprint.range}</span>}
             <span className="badge mono" style={{ background: 'var(--n-bg)', color: 'var(--tx2)' }}>
-              {points} SP / {CAPACITY}
+              {planned} SP / {capacity || '—'}
             </span>
-            <button
-              type="button"
-              className="btn btn--primary btn--sm spacer"
-              onClick={() =>
-                toast('Sprint 25 запущен', `${sprintKeys.length} задач · ${points} SP`)
-              }
-            >
-              Начать спринт
-            </button>
-          </div>
-
-          {sprintKeys.map((k) => {
-            const t = findTask(k)
-            return (
-              <div
-                key={k}
-                className="row row--static"
+            {sprint && (
+              <span
+                className="badge badge--sm"
                 style={{
-                  gridTemplateColumns: '20px 84px minmax(0,1fr) 30px 116px 26px 46px 26px',
-                  minWidth: 640,
+                  background: sprint.state === 'active' ? 'var(--ok-bg)' : 'var(--n-bg)',
+                  color: sprint.state === 'active' ? 'var(--ok)' : 'var(--tx2)',
                 }}
               >
-                <Icon name="drag_indicator" size={16} color="var(--border2)" />
-                <TaskKey>{t.key}</TaskKey>
-                <span
-                  className="ellipsis"
-                  style={{ fontSize: 12.5, cursor: 'pointer' }}
-                  onClick={() => nav(`/tasks/${k}`)}
-                >
-                  {t.title}
-                </span>
-                <span style={{ justifySelf: 'center' }}>
-                  <PriorityChip priority={t.priority} />
-                </span>
-                <StatusBadge status={statusOf(k)} dot={false} />
-                <Avatar id={t.who} />
-                <span
-                  className="mono"
-                  style={{ fontSize: 11.5, color: 'var(--tx2)', textAlign: 'right' }}
-                >
-                  {t.est} SP
-                </span>
-                <button
-                  type="button"
-                  className="btn btn--icon-quiet"
-                  style={{ width: 20, height: 20, justifySelf: 'center' }}
-                  title="Убрать из спринта"
-                  onClick={() => {
-                    removeFromSprint(k)
-                    toast('Убрано из спринта', k, 'info')
-                  }}
-                >
-                  <Icon name="remove_circle_outline" size={15} />
-                </button>
-              </div>
-            )
-          })}
+                {sprint.state === 'active' ? 'идёт' : sprint.state === 'planned' ? 'запланирован' : 'закрыт'}
+              </span>
+            )}
 
-          {overSprint && dragKey && (
-            <div className="drop-zone" style={{ margin: '8px 12px', minHeight: 46 }}>
-              Добавить в Sprint 25
+            {manage && sprint && sprint.state === 'planned' && (
+              <button
+                type="button"
+                className="btn btn--primary btn--sm spacer"
+                onClick={() =>
+                  void patchSprint
+                    .mutateAsync({ id: sprint.id, body: { state: 'active' } })
+                    .then(() => toast('Спринт запущен', sprint.name, 'ok'))
+                    .catch(toastError)
+                }
+              >
+                Начать спринт
+              </button>
+            )}
+            {manage && sprint && sprint.state === 'active' && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm spacer"
+                onClick={() =>
+                  void closeSprint
+                    .mutateAsync({ id: sprint.id, moveTo: null })
+                    .then((r) =>
+                      toast('Спринт закрыт', `Незакрытых задач возвращено в бэклог: ${r.moved}`, 'ok'),
+                    )
+                    .catch(toastError)
+                }
+              >
+                Завершить спринт
+              </button>
+            )}
+          </div>
+
+          {sprintTasks.length === 0 && (
+            <div className="sprint__empty">
+              {overSprint ? 'Отпустите, чтобы добавить задачу' : 'В спринте пока нет задач'}
             </div>
           )}
+
+          {sprintTasks.map((t) => (
+            <PlanRow
+              key={t.key}
+              task={t}
+              grid={SPRINT_GRID}
+              onOpen={() => nav(`/tasks/${t.key}`)}
+              action={
+                manage
+                  ? {
+                      icon: 'remove_circle_outline',
+                      title: 'Вернуть в бэклог',
+                      run: () => void drop(t.key),
+                    }
+                  : undefined
+              }
+            />
+          ))}
         </section>
 
-        <section className="card card--clip">
-          <div className="card__head">
-            <Icon name="inbox" size={17} color="var(--tx3)" />
-            <div className="card__title">Бэклог очереди VEKHA</div>
-            <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-              {backlogKeys.length} задач
-            </span>
-            <button type="button" className="btn btn--secondary btn--sm spacer">
-              Сортировка: приоритет
+        {/* ── Бэклог ─────────────────────────────────────────────────── */}
+        <section className="card" style={{ overflowX: 'auto' }}>
+          <div className="sprint__head" style={{ background: 'var(--surface2)' }}>
+            <Icon name="inbox" size={17} color="var(--tx2)" />
+            <div className="card__title">Бэклог</div>
+            <span className="count-pill">{backlog.length}</span>
+            <button type="button" className="btn btn--dashed btn--sm spacer" onClick={ui.openCreateModal}>
+              <Icon name="add" size={15} />
+              Задача
             </button>
           </div>
-          {backlogKeys.map((k) => {
-            const t = findTask(k)
-            return (
-              <div
-                key={k}
-                className="row row--static drag-row"
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move'
-                  setDragKey(k)
-                }}
-                onDragEnd={() => {
-                  setDragKey(null)
-                  setOverSprint(false)
-                }}
-                style={{
-                  gridTemplateColumns: '20px 84px minmax(0,1fr) 30px 116px 26px 60px 26px',
-                  minWidth: 640,
-                  opacity: dragKey === k ? 0.45 : 1,
-                  background: dragKey === k ? 'var(--ac-soft)' : undefined,
-                }}
-              >
-                <Icon name="drag_indicator" size={16} color="var(--border2)" />
-                <TaskKey>{t.key}</TaskKey>
-                <span
-                  className="ellipsis"
-                  style={{ fontSize: 12.5, cursor: 'pointer' }}
-                  onClick={() => nav(`/tasks/${k}`)}
-                >
-                  {t.title}
-                </span>
-                <span style={{ justifySelf: 'center' }}>
-                  <PriorityChip priority={t.priority} />
-                </span>
-                <StatusBadge status={statusOf(k)} dot={false} />
-                <Avatar id={t.who} />
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm mono"
-                  style={{ height: 22, padding: '0 6px', justifyContent: 'center' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toast('Оценка', 'Покер-планирование откроется в диалоге', 'info')
-                  }}
-                >
-                  {t.est} SP
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--icon-quiet"
-                  style={{ width: 20, height: 20, justifySelf: 'center' }}
-                  title="В спринт"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    add(k)
-                  }}
-                >
-                  <Icon name="add_circle_outline" size={16} />
-                </button>
-              </div>
-            )
-          })}
-          {backlogKeys.length === 0 && (
-            <div style={{ padding: '20px 13px', fontSize: 12.5, color: 'var(--tx3)' }}>
-              Бэклог пуст — все задачи распределены по спринтам.
-            </div>
+
+          {backlog.length === 0 && !planning.isLoading && (
+            <Empty
+              icon="inbox"
+              title="Бэклог пуст"
+              text="Все незакрытые задачи уже распределены по спринтам."
+            />
           )}
+
+          {backlog.map((t) => (
+            <PlanRow
+              key={t.key}
+              task={t}
+              grid={SPRINT_GRID}
+              draggable={manage}
+              onDragStart={() => setDragKey(t.key)}
+              onDragEnd={() => setDragKey(null)}
+              onOpen={() => nav(`/tasks/${t.key}`)}
+              action={
+                manage && sprint
+                  ? { icon: 'add_circle_outline', title: 'Добавить в спринт', run: () => void add(t.key) }
+                  : undefined
+              }
+            />
+          ))}
         </section>
       </div>
 
-      <aside className="sticky-aside">
-        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 11 }}>
-          Сводка спринта
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-          <div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: 11.5,
-                color: 'var(--tx2)',
-              }}
-            >
-              <span>Ёмкость команды</span>
-              <span className="mono">
-                {points}/{CAPACITY} SP
-              </span>
-            </div>
-            <Progress
-              pct={`${pct}%`}
-              color={pctColor}
-              variant="thick"
-              style={{ marginTop: 5 }}
-            />
-            <div style={{ fontSize: 11, color: pctColor, marginTop: 5 }}>
-              {pct > 85
-                ? 'Близко к пределу ёмкости команды'
-                : `Есть запас на ${CAPACITY - points} SP`}
-            </div>
+      {/* ── Правая колонка: ёмкость и нагрузка ───────────────────────── */}
+      <aside className="plan__side">
+        <div className="card card--pad">
+          <div className="card__title" style={{ marginBottom: 10 }}>
+            Ёмкость спринта
           </div>
 
-          <div className="vk-sep" />
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 9 }}>
-            <div>
-              <div style={{ fontSize: 10.5, color: 'var(--tx3)' }}>Задач в спринте</div>
-              <div className="mono" style={{ fontSize: 16, fontWeight: 600 }}>
-                {sprintKeys.length}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10.5, color: 'var(--tx3)' }}>Средняя оценка</div>
-              <div className="mono" style={{ fontSize: 16, fontWeight: 600 }}>
-                {avg}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10.5, color: 'var(--tx3)' }}>Скорость (3 спринта)</div>
-              <div className="mono" style={{ fontSize: 16, fontWeight: 600 }}>
-                44 SP
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10.5, color: 'var(--tx3)' }}>Незаоценённых</div>
-              <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: 'var(--warn)' }}>
-                2
-              </div>
-            </div>
-          </div>
-
-          <div className="vk-sep" />
-
-          <div>
-            <div style={{ fontSize: 11.5, color: 'var(--tx3)', marginBottom: 8 }}>
-              Распределение по людям
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {LOAD.map((l) => {
-                const over = l.sp > l.cap
-                const c = over
-                  ? 'var(--dang)'
-                  : l.sp / l.cap > 0.85
-                    ? 'var(--warn)'
-                    : 'var(--ac)'
-                return (
-                  <div
-                    key={l.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '22px minmax(0,1fr) 78px',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <Avatar id={l.id} />
-                    <Progress
-                      pct={`${Math.min(100, Math.round((l.sp / l.cap) * 100))}%`}
-                      color={c}
-                      variant="thin"
-                      style={{ height: 6, borderRadius: 3 }}
-                    />
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 11,
-                        color: c,
-                        textAlign: 'right',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {l.sp} / {l.cap} SP{over ? ' ⚠' : ''}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: '9px 10px',
-              background: 'var(--warn-bg)',
-              borderRadius: 8,
-              display: 'flex',
-              gap: 8,
-              color: 'var(--warn)',
-              fontSize: 11.5,
-            }}
-          >
-            <Icon name="warning" size={16} />
-            <span>
-              У {PEOPLE.DS.name.split(' ')[0]}а 96% загрузки. Перенесите одну задачу, чтобы
-              уложиться в ёмкость.
+          <div className="plan__meter">
+            <span className="mono" style={{ fontSize: 22, color: pctColor }}>
+              {planned}
             </span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>из {capacity || '—'} SP</span>
           </div>
+          <Progress pct={`${Math.min(100, pct)}%`} color={pctColor} style={{ height: 6, borderRadius: 3 }} />
+
+          <div className="plan__facts">
+            <div>
+              <b className="mono">{summary?.tasks ?? 0}</b>
+              <span>задач</span>
+            </div>
+            <div>
+              <b className="mono">{summary?.free ?? 0}</b>
+              <span>свободно SP</span>
+            </div>
+            <div>
+              <b className="mono" style={{ color: summary?.over ? 'var(--dang)' : undefined }}>
+                {summary?.over ?? 0}
+              </b>
+              <span>перебор SP</span>
+            </div>
+          </div>
+
+          {manage && sprint && (
+            <label className="label" style={{ marginTop: 12 }}>
+              <span>Ёмкость команды, SP</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                defaultValue={sprint.capacity}
+                onBlur={(e) => {
+                  const value = Number(e.target.value)
+                  if (value !== sprint.capacity) {
+                    void patchSprint
+                      .mutateAsync({ id: sprint.id, body: { capacity: value } })
+                      .catch(toastError)
+                  }
+                }}
+              />
+            </label>
+          )}
+
+          {(summary?.unestimated ?? 0) > 0 && (
+            <div className="plan__warn">
+              <Icon name="straighten" size={15} color="var(--warn)" />
+              {summary?.unestimated} задач без оценки — план неточен
+            </div>
+          )}
+          {(summary?.unassigned ?? 0) > 0 && (
+            <div className="plan__warn">
+              <Icon name="person_off" size={15} color="var(--warn)" />
+              {summary?.unassigned} задач без исполнителя
+            </div>
+          )}
+        </div>
+
+        <div className="card card--pad">
+          <div className="card__title" style={{ marginBottom: 10 }}>
+            Нагрузка по людям
+          </div>
+
+          {people.length === 0 && <div className="plan__none">Нет участников</div>}
+
+          {people.map((p) => (
+            <div key={p.id} className="plan__person">
+              <Avatar id={p.code} size="md" />
+              <span className="ellipsis" style={{ fontSize: 12, flex: 1 }}>
+                {p.name}
+              </span>
+              <span
+                className="mono"
+                style={{ fontSize: 11.5, color: p.overloaded ? 'var(--dang)' : 'var(--tx2)' }}
+              >
+                {p.points}/{p.capacity || '—'}
+              </span>
+              <Progress
+                pct={`${Math.min(100, p.load)}%`}
+                color={p.overloaded ? 'var(--dang)' : 'var(--ac)'}
+                variant="thin"
+                style={{ gridColumn: '1 / -1', marginTop: 4 }}
+              />
+              {p.overloaded && (
+                <span className="plan__over">
+                  <Icon name="warning" size={13} color="var(--dang)" />
+                  перегрузка
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       </aside>
+
+      {creating && (
+        <SprintDialog
+          queues={(queues.data ?? []).map((q) => ({ key: q.key, name: q.name }))}
+          busy={createSprint.isPending}
+          onClose={() => setCreating(false)}
+          onSave={async (body) => {
+            try {
+              await createSprint.mutateAsync(body)
+              toast('Спринт создан', String(body.name), 'ok')
+              setCreating(false)
+            } catch (err) {
+              toastError(err)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PlanRow({
+  task,
+  grid,
+  draggable,
+  onDragStart,
+  onDragEnd,
+  onOpen,
+  action,
+}: {
+  task: Task
+  grid: string
+  draggable?: boolean
+  onDragStart?: () => void
+  onDragEnd?: () => void
+  onOpen: () => void
+  action?: { icon: string; title: string; run: () => void }
+}) {
+  return (
+    <div
+      className="row"
+      style={{ gridTemplateColumns: grid, minWidth: 660 }}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={onOpen}
+    >
+      <Icon
+        name="drag_indicator"
+        size={16}
+        color={draggable ? 'var(--border2)' : 'transparent'}
+      />
+      <TaskKey>{task.key}</TaskKey>
+      <span className="ellipsis" style={{ fontSize: 12.5 }}>
+        {task.title}
+      </span>
+      <PriorityChip priority={task.priority} small />
+      <StatusBadge status={task.status} category={task.statusCategory} small />
+      <Avatar id={task.who} size="md" />
+      <span className="mono" style={{ fontSize: 11.5, color: dueColor(task.dueState), textAlign: 'right' }}>
+        {task.est ? `${task.est} SP` : '—'}
+      </span>
+      {action ? (
+        <button
+          type="button"
+          className="btn btn--icon-quiet"
+          title={action.title}
+          onClick={(e) => {
+            e.stopPropagation()
+            action.run()
+          }}
+        >
+          <Icon name={action.icon} size={16} />
+        </button>
+      ) : (
+        <span />
+      )}
+    </div>
+  )
+}
+
+function SprintDialog({
+  queues,
+  busy,
+  onClose,
+  onSave,
+}: {
+  queues: { key: string; name: string }[]
+  busy: boolean
+  onClose: () => void
+  onSave: (body: Record<string, unknown>) => void
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+  const inTwoWeeks = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10)
+
+  const [name, setName] = useState('')
+  const [queue, setQueue] = useState(queues[0]?.key ?? '')
+  const [goal, setGoal] = useState('')
+  const [startDate, setStartDate] = useState(today)
+  const [endDate, setEndDate] = useState(inTwoWeeks)
+  const [capacity, setCapacity] = useState('40')
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div
+        className="modal"
+        style={{ width: 520, maxWidth: '94vw' }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Новый спринт"
+      >
+        <div className="modal__head">
+          <Icon name="rotate_right" size={18} color="var(--ac)" />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Новый спринт</div>
+          <button type="button" className="btn btn--icon-quiet spacer" onClick={onClose} aria-label="Закрыть">
+            <Icon name="close" size={17} />
+          </button>
+        </div>
+
+        <div className="modal__body">
+          <div className="grid-2">
+            <label className="label">
+              <span>Название</span>
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Sprint 25"
+                autoFocus
+              />
+            </label>
+            <label className="label">
+              <span>Очередь</span>
+              <select className="select" value={queue} onChange={(e) => setQueue(e.target.value)}>
+                {queues.map((q) => (
+                  <option key={q.key} value={q.key}>
+                    {q.key} · {q.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="label">
+            <span>Цель спринта</span>
+            <input
+              className="input"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              placeholder="Что команда хочет получить к концу"
+            />
+          </label>
+
+          <div className="grid-3">
+            <label className="label">
+              <span>Начало</span>
+              <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </label>
+            <label className="label">
+              <span>Окончание</span>
+              <input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </label>
+            <label className="label">
+              <span>Ёмкость, SP</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="modal__foot">
+          <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            disabled={busy}
+            onClick={() =>
+              onSave({ name, queue, goal, startDate, endDate, capacity: Number(capacity), state: 'planned' })
+            }
+          >
+            Создать спринт
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { PEOPLE, priorityStyle, statusStyle } from '../../data/catalog'
-import type { PersonId, PriorityName, StatusName } from '../../data/types'
+import { priorityStyle, statusStyle } from '../../data/catalog'
+import { usePerson } from '../../store/session'
+import type {
+  PersonId,
+  PriorityName,
+  StatusCategory,
+  StatusName,
+} from '../../data/types'
 
 export function Icon({
   name,
@@ -32,17 +38,31 @@ export function Avatar({
   size = 'md',
   title,
 }: {
-  id: PersonId
+  /** Код участника; null отрисует нейтральную заглушку «без исполнителя». */
+  id: PersonId | null
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'base'
   title?: boolean
 }) {
-  const p = PEOPLE[id]
+  const p = usePerson(id)
   const cls = size === 'base' ? 'av' : `av av--${size}`
+
+  if (!id) {
+    return (
+      <span
+        className={cls}
+        style={{ background: 'var(--n-bg)', color: 'var(--tx3)' }}
+        title={title === false ? undefined : 'Без исполнителя'}
+      >
+        —
+      </span>
+    )
+  }
+
   return (
     <span
       className={cls}
       style={{ background: p.bg, color: p.fg }}
-      title={title === false ? undefined : p.name}
+      title={title === false ? undefined : `${p.name} · ${p.role}`}
     >
       {p.who}
     </span>
@@ -53,13 +73,13 @@ export function AvatarStack({
   ids,
   size = 'md',
 }: {
-  ids: PersonId[]
+  ids: (PersonId | null)[]
   size?: 'xs' | 'sm' | 'md' | 'lg'
 }) {
   return (
     <span className="av-stack">
-      {ids.map((id) => (
-        <Avatar key={id} id={id} size={size} />
+      {ids.map((id, i) => (
+        <Avatar key={id ?? `empty-${i}`} id={id} size={size} />
       ))}
     </span>
   )
@@ -67,14 +87,17 @@ export function AvatarStack({
 
 export function StatusBadge({
   status,
+  category,
   dot = true,
   small = false,
 }: {
   status: StatusName
+  /** Категория нужна статусам, добавленным в настройках воркфлоу. */
+  category?: StatusCategory
   dot?: boolean
   small?: boolean
 }) {
-  const st = statusStyle(status)
+  const st = statusStyle(status, category)
   return (
     <span
       className={small ? 'badge badge--sm' : 'badge'}

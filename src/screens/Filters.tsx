@@ -1,467 +1,507 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Avatar,
-  Icon,
-  PriorityChip,
-  Segmented,
-  StatusBadge,
-  TaskKey,
-} from '../components/ui'
+import { Avatar, Empty, Icon, StatusBadge, TaskKey } from '../components/ui'
 import { dueColor } from '../data/catalog'
-import { TASKS } from '../data/tasks'
-import {
-  FAV_FILTERS,
-  RECENT_FILTERS,
-  SAVED_FILTERS,
-  TEAM_FILTERS,
-} from '../data/workspace'
-import type { FilterCondition } from '../data/types'
+import { api } from '../api/client'
+import { useApiMutation, useFilterFields, useFilters, useTasks } from '../api/hooks'
 import { useApp } from '../store/app'
 
-const MODES = [
-  { value: 'builder', label: 'Конструктор' },
-  { value: 'query', label: 'Язык запросов' },
-] as const
+/**
+ * Конструктор фильтров. Условия собираются мышью, но итог — всегда строка
+ * запроса: её видно, можно править руками и сохранять как фильтр.
+ */
 
-const INITIAL_CONDITIONS: FilterCondition[] = [
-  {
-    field: 'Очередь',
-    op: 'входит в',
-    icon: 'layers',
-    values: ['VEKHA', 'REL'],
-    vbg: 'var(--ac-soft)',
-    vfg: 'var(--ac-tx)',
-  },
-  {
-    field: 'Статус',
-    op: 'входит в',
-    icon: 'sync_alt',
-    values: ['In Progress', 'Review'],
-    vbg: 'var(--n-bg)',
-    vfg: 'var(--tx2)',
-  },
-  {
-    field: 'Дедлайн',
-    op: 'раньше чем',
-    icon: 'calendar_today',
-    values: ['конец недели'],
-    vbg: 'var(--warn-bg)',
-    vfg: 'var(--warn)',
-  },
+interface Condition {
+  field: string
+  op: string
+  value: string
+}
+
+const OPS = [
+  { key: '=', label: 'равно' },
+  { key: '!=', label: 'не равно' },
+  { key: 'in', label: 'один из' },
+  { key: '<=', label: 'не позже' },
+  { key: '>=', label: 'не раньше' },
+  { key: '~', label: 'содержит' },
 ]
 
-const GROUP_CONDITIONS = [
-  { join: 'или', field: 'Приоритет', icon: 'priority_high', op: 'равен', value: 'Critical', vbg: 'var(--dang-bg)', vfg: 'var(--dang)' },
-  { join: 'или', field: 'Тег', icon: 'sell', op: 'содержит', value: 'release', vbg: 'var(--n-bg)', vfg: 'var(--tx2)' },
-]
+function buildQuery(conditions: Condition[], join: 'AND' | 'OR'): string {
+  return conditions
+    .filter((c) => c.field && c.value)
+    .map((c) => {
+      const value = c.value.includes(' ') && !c.value.endsWith(')') ? `"${c.value}"` : c.value
+      return c.op === 'in' ? `${c.field} in (${c.value})` : `${c.field} ${c.op} ${value}`
+    })
+    .join(` ${join} `)
+}
 
 export function Filters() {
   const nav = useNavigate()
-  const { statusOf, toast } = useApp()
-  const [mode, setMode] = useState<(typeof MODES)[number]['value']>('builder')
-  const [active, setActive] = useState('Мои открытые')
-  const [conditions, setConditions] = useState(INITIAL_CONDITIONS)
-  const [groupJoin, setGroupJoin] = useState<'OR' | 'AND'>('OR')
-  const [hasGroup, setHasGroup] = useState(true)
+  const { toast, toastError } = useApp()
 
-  const results = TASKS.filter(
-    (t) => ['In Progress', 'Review'].includes(statusOf(t.key)) || t.priority === 'Critical',
+  const catalog = useFilterFields()
+  const library = useFilters()
+
+  const [conditions, setConditions] = useState<Condition[]>([
+    { field: 'assignee', op: '=', value: 'currentUser()' },
+    { field: 'category', op: '!=', value: 'done' },
+  ])
+  const [join, setJoin] = useState<'AND' | 'OR'>('AND')
+  const [manual, setManual] = useState('')
+  const [edited, setEdited] = useState(false)
+  const [check, setCheck] = useState<{ ok: boolean; n?: number; error?: string } | null>(null)
+  const [saveOpen, setSaveOpen] = useState(false)
+
+  const built = useMemo(() => buildQuery(conditions, join), [conditions, join])
+  const query = edited ? manual : built
+
+  useEffect(() => {
+    if (!edited) setManual(built)
+  }, [built, edited])
+
+  /* Проверка запроса на сервере: она же считает количество попаданий. */
+  useEffect(() => {
+    if (!query.trim()) {
+      setCheck(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      void api
+        .post<{ ok: boolean; n?: number; error?: string }>('/api/filters/validate', { query })
+        .then(setCheck)
+        .catch(() => setCheck({ ok: false, error: 'Не удалось проверить запрос' }))
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [query])
+
+  const results = useTasks({ q: check?.ok ? query : undefined, perPage: 25 }, { enabled: Boolean(check?.ok) })
+
+  const saveFilter = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.post('/api/filters', body),
+    ['filters'],
+  )
+  const dropFilter = useApiMutation<string, unknown>((id) => api.del(`/api/filters/${id}`), ['filters'])
+  const toggleFavorite = useApiMutation<{ id: string; favorite: boolean }, unknown>(
+    ({ id, favorite }) => api.patch(`/api/filters/${id}`, { favorite }),
+    ['filters'],
   )
 
+  function applyFilter(q: string) {
+    setEdited(true)
+    setManual(q)
+  }
+
+  const fields = catalog.data?.fields ?? []
+
   return (
-    <div
-      className="split"
-      style={{ gridTemplateColumns: '212px minmax(0,1fr)', minHeight: '100%', gap: 0 }}
-    >
+    <div className="split" style={{ gridTemplateColumns: '250px minmax(0,1fr)', minHeight: '100%', gap: 0 }}>
+      {/* ── Библиотека фильтров ────────────────────────────────────────── */}
       <aside className="filter-side">
-        <div className="vk-eyebrow" style={{ padding: '0 6px 8px' }}>
+        <div className="vk-eyebrow" style={{ padding: '4px 4px 8px' }}>
           Избранные
         </div>
-        {FAV_FILTERS.map((f) => (
-          <button
-            key={f.label}
-            type="button"
-            className={active === f.label ? 'filter-item filter-item--on' : 'filter-item'}
-            onClick={() => setActive(f.label)}
-          >
-            <Icon name="push_pin" size={15} color="var(--ac)" />
-            <span className="ellipsis" style={{ flex: 1 }}>
-              {f.label}
-            </span>
-            <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>
-              {f.n}
-            </span>
-          </button>
+        {(library.data?.favorites ?? []).map((f) => (
+          <FilterItem
+            key={f.id}
+            filter={f}
+            onPick={() => applyFilter(f.query)}
+            onStar={() => void toggleFavorite.mutateAsync({ id: f.id, favorite: false }).catch(toastError)}
+            onDrop={f.mine ? () => void dropFilter.mutateAsync(f.id).catch(toastError) : undefined}
+          />
         ))}
 
-        <div className="vk-eyebrow" style={{ padding: '12px 6px 8px' }}>
+        <div className="vk-eyebrow" style={{ padding: '12px 4px 8px' }}>
           Мои фильтры
         </div>
-        {SAVED_FILTERS.map((f) => (
-          <button
-            key={f.label}
-            type="button"
-            className={active === f.label ? 'filter-item filter-item--on' : 'filter-item'}
-            onClick={() => setActive(f.label)}
-          >
-            <Icon name={f.icon} size={16} color={f.icf} />
-            <span className="ellipsis" style={{ flex: 1 }}>
-              {f.label}
-            </span>
-            <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>
-              {f.n}
-            </span>
-          </button>
-        ))}
-        <button
-          type="button"
-          className="btn btn--dashed"
-          style={{ width: '100%', marginTop: 8, justifyContent: 'flex-start' }}
-          onClick={() => toast('Фильтр сохранён', 'Доступен вам и команде')}
-        >
-          <Icon name="add" size={15} />
-          Новый фильтр
-        </button>
-
-        <div className="vk-sep" style={{ margin: '14px 4px' }} />
-
-        <div className="vk-eyebrow" style={{ padding: '0 6px 8px' }}>
-          Общие фильтры команды
-        </div>
-        {TEAM_FILTERS.map((tf) => (
-          <div key={tf.label} className="filter-item" style={{ height: 28 }}>
-            <Avatar id={tf.who} size="xs" title={false} />
-            <span className="ellipsis" style={{ flex: 1 }}>
-              {tf.label}
-            </span>
-            <Icon name="push_pin" size={14} color="var(--tx3)" title="Добавить в избранное" />
-          </div>
+        {(library.data?.saved ?? []).length === 0 && (
+          <div className="filter-side__none">Сохранённых фильтров нет</div>
+        )}
+        {(library.data?.saved ?? []).map((f) => (
+          <FilterItem
+            key={f.id}
+            filter={f}
+            onPick={() => applyFilter(f.query)}
+            onStar={() => void toggleFavorite.mutateAsync({ id: f.id, favorite: true }).catch(toastError)}
+            onDrop={() => void dropFilter.mutateAsync(f.id).catch(toastError)}
+          />
         ))}
 
-        <div className="vk-eyebrow" style={{ padding: '12px 6px 8px' }}>
-          Недавние
+        <div className="vk-eyebrow" style={{ padding: '12px 4px 8px' }}>
+          Командные
         </div>
-        {RECENT_FILTERS.map((rf) => (
-          <button
-            key={rf.label}
-            type="button"
-            className="filter-item"
-            style={{ height: 28 }}
-            onClick={() => setMode('query')}
-          >
-            <Icon name="history" size={15} color="var(--tx3)" />
-            <span className="ellipsis" style={{ flex: 1 }}>
-              {rf.label}
-            </span>
-          </button>
+        {(library.data?.team ?? []).length === 0 && (
+          <div className="filter-side__none">Никто не делился фильтрами</div>
+        )}
+        {(library.data?.team ?? []).map((f) => (
+          <FilterItem key={f.id} filter={f} onPick={() => applyFilter(f.query)} />
         ))}
       </aside>
 
+      {/* ── Конструктор ────────────────────────────────────────────────── */}
       <div style={{ padding: '14px 16px 30px', minWidth: 0 }}>
-        <div className="page__head">
+        <div className="page__head" style={{ marginBottom: 12 }}>
           <div className="page__title">Расширенный поиск</div>
-          <Segmented options={MODES} value={mode} onChange={setMode} style={{ marginLeft: 6 }} />
-          <button
-            type="button"
-            className="btn btn--primary spacer"
-            onClick={() => toast('Поиск выполнен', `${results.length} задач · 128 мс`)}
-          >
-            <Icon name="play_arrow" size={16} />
-            Найти
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary"
-            onClick={() => toast('Фильтр сохранён', `«${active}» обновлён`)}
-          >
-            <Icon name="bookmark_add" size={16} />
-            Сохранить
+          <span className="page__note">условия собираются в запрос — его можно править руками</span>
+        </div>
+
+        <section className="card card--pad">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <div className="card__title">Условия</div>
+            <div className="cond__join">
+              {(['AND', 'OR'] as const).map((j) => (
+                <button
+                  key={j}
+                  type="button"
+                  className={join === j ? 'seg__item seg__item--on' : 'seg__item'}
+                  onClick={() => {
+                    setJoin(j)
+                    setEdited(false)
+                  }}
+                >
+                  {j === 'AND' ? 'И' : 'ИЛИ'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn--dashed btn--sm spacer"
+              onClick={() => {
+                setConditions([...conditions, { field: 'status', op: '=', value: '' }])
+                setEdited(false)
+              }}
+            >
+              <Icon name="add" size={15} />
+              Условие
+            </button>
+          </div>
+
+          {conditions.map((c, i) => {
+            const field = fields.find((f) => f.key === c.field)
+            return (
+              <div key={i} className="cond">
+                <Icon name={field?.icon ?? 'label'} size={16} color="var(--tx3)" />
+                <select
+                  className="select"
+                  value={c.field}
+                  onChange={(e) => {
+                    const next = [...conditions]
+                    next[i] = { ...c, field: e.target.value, value: '' }
+                    setConditions(next)
+                    setEdited(false)
+                  }}
+                >
+                  {fields.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="select"
+                  value={c.op}
+                  onChange={(e) => {
+                    const next = [...conditions]
+                    next[i] = { ...c, op: e.target.value }
+                    setConditions(next)
+                    setEdited(false)
+                  }}
+                >
+                  {OPS.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+
+                {field && field.values.length > 0 ? (
+                  <select
+                    className="select"
+                    value={c.value}
+                    onChange={(e) => {
+                      const next = [...conditions]
+                      next[i] = { ...c, value: e.target.value }
+                      setConditions(next)
+                      setEdited(false)
+                    }}
+                  >
+                    <option value="">— выберите —</option>
+                    {c.field === 'assignee' || c.field === 'author' ? (
+                      <option value="currentUser()">я (currentUser)</option>
+                    ) : null}
+                    {field.values.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="input"
+                    value={c.value}
+                    onChange={(e) => {
+                      const next = [...conditions]
+                      next[i] = { ...c, value: e.target.value }
+                      setConditions(next)
+                      setEdited(false)
+                    }}
+                    placeholder="значение"
+                  />
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn--icon-quiet"
+                  aria-label="Убрать условие"
+                  onClick={() => {
+                    setConditions(conditions.filter((_, j) => j !== i))
+                    setEdited(false)
+                  }}
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+            )
+          })}
+
+          <div className="jql">
+            <span className="vk-eyebrow">Запрос</span>
+            <textarea
+              className="textarea mono"
+              rows={2}
+              value={query}
+              onChange={(e) => {
+                setManual(e.target.value)
+                setEdited(true)
+              }}
+              spellCheck={false}
+            />
+            <div className="jql__status">
+              {check === null && <span style={{ color: 'var(--tx3)' }}>введите условия</span>}
+              {check?.ok && (
+                <span style={{ color: 'var(--ok)' }}>
+                  <Icon name="check_circle" size={14} /> найдено задач: {check.n}
+                </span>
+              )}
+              {check && !check.ok && (
+                <span style={{ color: 'var(--dang)' }}>
+                  <Icon name="error" size={14} /> {check.error}
+                </span>
+              )}
+              <span className="spacer" style={{ display: 'flex', gap: 6 }}>
+                {edited && (
+                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => setEdited(false)}>
+                    Вернуть из конструктора
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={!check?.ok}
+                  onClick={() => nav(`/tasks?q=${encodeURIComponent(query)}`)}
+                >
+                  Открыть в списке
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  disabled={!check?.ok}
+                  onClick={() => setSaveOpen(true)}
+                >
+                  Сохранить фильтр
+                </button>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Результаты ───────────────────────────────────────────────── */}
+        <section className="card card--clip" style={{ marginTop: 12 }}>
+          <div className="card__head">
+            <div className="card__title">Результаты</div>
+            <span className="count-pill">{results.data?.total ?? 0}</span>
+          </div>
+
+          {!check?.ok && (
+            <Empty
+              icon="filter_alt"
+              title="Запрос не выполнен"
+              text="Соберите условия слева или исправьте текст запроса — результаты появятся автоматически."
+            />
+          )}
+
+          {check?.ok &&
+            (results.data?.items ?? []).map((t) => (
+              <div
+                key={t.key}
+                className="row"
+                style={{ gridTemplateColumns: '96px minmax(0,1fr) 124px 30px 78px', gap: 8 }}
+                onClick={() => nav(`/tasks/${t.key}`)}
+              >
+                <TaskKey>{t.key}</TaskKey>
+                <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                  {t.title}
+                </span>
+                <StatusBadge status={t.status} category={t.statusCategory} />
+                <Avatar id={t.who} size="md" />
+                <span className="mono" style={{ fontSize: 11.5, color: dueColor(t.dueState) }}>
+                  {t.due}
+                </span>
+              </div>
+            ))}
+
+          {check?.ok && (results.data?.items.length ?? 0) === 0 && (
+            <Empty title="Ничего не найдено" text="Условиям не соответствует ни одна задача." />
+          )}
+        </section>
+      </div>
+
+      {saveOpen && (
+        <SaveDialog
+          query={query}
+          busy={saveFilter.isPending}
+          onClose={() => setSaveOpen(false)}
+          onSave={async (body) => {
+            try {
+              await saveFilter.mutateAsync(body)
+              toast('Фильтр сохранён', String(body.name), 'ok')
+              setSaveOpen(false)
+            } catch (err) {
+              toastError(err)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function FilterItem({
+  filter,
+  onPick,
+  onStar,
+  onDrop,
+}: {
+  filter: { id: string; label: string; icon: string; icf: string; n: number; error: string | null }
+  onPick: () => void
+  onStar?: () => void
+  onDrop?: () => void
+}) {
+  return (
+    <div className="filter-item" onClick={onPick}>
+      <Icon name={filter.icon} size={16} color={filter.icf} />
+      <span className="ellipsis" style={{ flex: 1, fontSize: 12.5 }}>
+        {filter.label}
+      </span>
+      {filter.error ? (
+        <Icon name="error" size={14} color="var(--dang)" title={filter.error} />
+      ) : (
+        <span className="count-pill">{filter.n}</span>
+      )}
+      {onStar && (
+        <button
+          type="button"
+          className="btn btn--icon-quiet"
+          aria-label="В избранное"
+          onClick={(e) => {
+            e.stopPropagation()
+            onStar()
+          }}
+        >
+          <Icon name="push_pin" size={14} />
+        </button>
+      )}
+      {onDrop && (
+        <button
+          type="button"
+          className="btn btn--icon-quiet"
+          aria-label="Удалить фильтр"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDrop()
+          }}
+        >
+          <Icon name="close" size={14} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function SaveDialog({
+  query,
+  busy,
+  onClose,
+  onSave,
+}: {
+  query: string
+  busy: boolean
+  onClose: () => void
+  onSave: (body: Record<string, unknown>) => void
+}) {
+  const [name, setName] = useState('')
+  const [favorite, setFavorite] = useState(false)
+  const [shared, setShared] = useState(false)
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div
+        className="modal"
+        style={{ width: 460, maxWidth: '94vw' }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Сохранить фильтр"
+      >
+        <div className="modal__head">
+          <Icon name="bookmark_add" size={18} color="var(--ac)" />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Сохранить фильтр</div>
+          <button type="button" className="btn btn--icon-quiet spacer" onClick={onClose} aria-label="Закрыть">
+            <Icon name="close" size={17} />
           </button>
         </div>
 
-        {mode === 'builder' && (
-          <section className="card card--pad" style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {conditions.map((cd, i) => (
-                <div key={cd.field} className="cond">
-                  <span className="cond__join">{i === 0 ? 'где' : 'и'}</span>
-                  <button type="button" className="cond__pick">
-                    <Icon name={cd.icon} size={15} color="var(--tx3)" />
-                    <span style={{ flex: 1, textAlign: 'left' }}>{cd.field}</span>
-                    <Icon name="expand_more" size={15} color="var(--tx3)" />
-                  </button>
-                  <button
-                    type="button"
-                    className="cond__pick"
-                    style={{ justifyContent: 'space-between', color: 'var(--tx2)' }}
-                  >
-                    {cd.op}
-                    <Icon name="expand_more" size={15} color="var(--tx3)" />
-                  </button>
-                  <div className="cond__values">
-                    {cd.values.map((v) => (
-                      <span
-                        key={v}
-                        className="badge"
-                        style={{ background: cd.vbg, color: cd.vfg, height: 21 }}
-                      >
-                        {v}
-                        <Icon name="close" size={13} />
-                      </span>
-                    ))}
-                    <span style={{ fontSize: 12, color: 'var(--tx3)' }}>добавить…</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn--icon-quiet btn--danger"
-                    style={{ width: 28, height: 28 }}
-                    aria-label={`Удалить условие ${cd.field}`}
-                    onClick={() => setConditions(conditions.filter((_, j) => j !== i))}
-                  >
-                    <Icon name="delete" size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {hasGroup && (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '58px minmax(0,1fr)',
-                  gap: 8,
-                  marginTop: 8,
-                  alignItems: 'start',
-                }}
-              >
-                <span className="cond__join" style={{ paddingTop: 8 }}>
-                  и
-                </span>
-                <div
-                  style={{
-                    border: '1px solid var(--ac-soft2)',
-                    background: 'var(--ac-soft)',
-                    borderRadius: 8,
-                    padding: '8px 9px',
-                  }}
-                >
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}
-                  >
-                    <Icon name="data_array" size={15} color="var(--ac-tx)" />
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ac-tx)' }}>
-                      Любое из условий группы
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn--sm"
-                      style={{
-                        height: 20,
-                        padding: '0 7px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--ac-soft2)',
-                        color: 'var(--ac-tx)',
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                      }}
-                      onClick={() => setGroupJoin(groupJoin === 'OR' ? 'AND' : 'OR')}
-                    >
-                      {groupJoin}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--icon-quiet spacer"
-                      style={{ width: 20, height: 20 }}
-                      aria-label="Удалить группу"
-                      onClick={() => setHasGroup(false)}
-                    >
-                      <Icon name="close" size={15} />
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {GROUP_CONDITIONS.map((gc) => (
-                      <div
-                        key={gc.field}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '38px 142px 120px minmax(0,1fr)',
-                          alignItems: 'center',
-                          gap: 7,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--ac-tx)',
-                            textTransform: 'uppercase',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {gc.join}
-                        </span>
-                        <button
-                          type="button"
-                          className="cond__pick"
-                          style={{ height: 28, background: 'var(--surface)' }}
-                        >
-                          <Icon name={gc.icon} size={15} color="var(--tx3)" />
-                          <span style={{ flex: 1, textAlign: 'left' }}>{gc.field}</span>
-                          <Icon name="expand_more" size={15} color="var(--tx3)" />
-                        </button>
-                        <button
-                          type="button"
-                          className="cond__pick"
-                          style={{
-                            height: 28,
-                            background: 'var(--surface)',
-                            justifyContent: 'space-between',
-                            color: 'var(--tx2)',
-                          }}
-                        >
-                          {gc.op}
-                          <Icon name="expand_more" size={15} color="var(--tx3)" />
-                        </button>
-                        <div
-                          className="cond__values"
-                          style={{ minHeight: 28, background: 'var(--surface)' }}
-                        >
-                          <span
-                            className="badge"
-                            style={{ background: gc.vbg, color: gc.vfg, height: 20 }}
-                          >
-                            {gc.value}
-                            <Icon name="close" size={13} />
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 7, marginTop: 11 }}>
-              <button
-                type="button"
-                className="btn btn--dashed"
-                onClick={() =>
-                  setConditions([
-                    ...conditions,
-                    {
-                      field: 'Исполнитель',
-                      op: 'равен',
-                      icon: 'person',
-                      values: ['currentUser()'],
-                      vbg: 'var(--ac-soft)',
-                      vfg: 'var(--ac-tx)',
-                    },
-                  ])
-                }
-              >
-                <Icon name="add" size={15} />
-                Условие
-              </button>
-              <button
-                type="button"
-                className="btn btn--dashed"
-                onClick={() => setHasGroup(true)}
-              >
-                <Icon name="data_array" size={15} />
-                Группа условий
-              </button>
-            </div>
-          </section>
-        )}
-
-        {mode === 'query' && (
-          <section className="card card--pad" style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11.5, color: 'var(--tx3)', marginBottom: 7 }}>
-              Язык запросов Vekha
-            </div>
-            <div className="jql">
-              <span className="k">queue</span> = <span className="s">"VEKHA"</span>{' '}
-              <span className="op">AND</span> <span className="k">status</span>{' '}
-              <span className="op">IN</span> (<span className="s">"In Progress"</span>,{' '}
-              <span className="s">"Review"</span>)
-              <br />
-              <span className="op">AND</span> <span className="k">assignee</span> ={' '}
-              <span className="s">currentUser()</span> <span className="op">AND</span>{' '}
-              <span className="k">deadline</span> &lt;= <span className="s">endOfWeek()</span>
-              <br />
-              <span className="op">ORDER BY</span> <span className="k">priority</span>{' '}
-              <span className="op">DESC</span>, <span className="k">deadline</span>{' '}
-              <span className="op">ASC</span>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                marginTop: 9,
-                fontSize: 11.5,
-                color: 'var(--ok)',
-              }}
-            >
-              <Icon name="check_circle" size={15} />
-              Синтаксис корректен · 4 условия · оценка 128 мс
-            </div>
-          </section>
-        )}
-
-        <section className="card card--clip">
-          <div className="card__head">
-            <div className="card__title">Результаты</div>
-            <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-              {results.length}
-            </span>
-            <div className="spacer" style={{ display: 'flex', gap: 6 }}>
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                onClick={() => nav('/tasks')}
-              >
-                Открыть как список
-              </button>
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                onClick={() => nav('/board')}
-              >
-                Открыть как доску
-              </button>
-            </div>
+        <div className="modal__body">
+          <label className="label">
+            <span>Название</span>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Например: критичные в спринте"
+              autoFocus
+            />
+          </label>
+          <label className="label">
+            <span>Запрос</span>
+            <textarea className="textarea mono" rows={2} value={query} readOnly />
+          </label>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <label className="checkline">
+              <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} />
+              Закрепить в избранном
+            </label>
+            <label className="checkline">
+              <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+              Показать команде
+            </label>
           </div>
-          {results.map((t) => (
-            <div
-              key={t.key}
-              className="row"
-              style={{
-                gridTemplateColumns: '88px minmax(0,1fr) 124px 32px 26px 130px 78px',
-              }}
-              onClick={() => nav(`/tasks/${t.key}`)}
-            >
-              <TaskKey>{t.key}</TaskKey>
-              <span className="ellipsis" style={{ fontSize: 12.5 }}>
-                {t.title}
-              </span>
-              <StatusBadge status={statusOf(t.key)} dot={false} />
-              <span style={{ justifySelf: 'center' }}>
-                <PriorityChip priority={t.priority} />
-              </span>
-              <Avatar id={t.who} />
-              <span className="ellipsis" style={{ fontSize: 12, color: 'var(--tx2)' }}>
-                {t.project}
-              </span>
-              <span
-                className="mono"
-                style={{ fontSize: 11.5, color: dueColor(t.dueState), textAlign: 'right' }}
-              >
-                {t.due}
-              </span>
-            </div>
-          ))}
-        </section>
+        </div>
+
+        <div className="modal__foot">
+          <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            disabled={busy || !name.trim()}
+            onClick={() => onSave({ name, query, favorite, shared })}
+          >
+            Сохранить
+          </button>
+        </div>
       </div>
     </div>
   )

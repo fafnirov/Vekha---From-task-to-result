@@ -14,7 +14,7 @@
 import { prisma } from './prisma.js'
 import { notify, record, taskAudience } from './activity.js'
 import { emitChanges } from './events.js'
-import { PRIORITY_LABEL, type Priority } from './constants.js'
+import { PRIORITY_LABEL, PRIORITY_ORDER, type Priority } from './constants.js'
 import { startOfDay } from './format.js'
 
 export type Trigger = 'task_created' | 'status_changed' | 'task_closed' | 'schedule'
@@ -34,6 +34,7 @@ interface Action {
   type:
     | 'notify'
     | 'set_priority'
+    | 'raise_priority'
     | 'set_assignee'
     | 'set_status'
     | 'add_comment'
@@ -178,19 +179,30 @@ async function audienceFor(taskId: string, role: string | undefined): Promise<st
 
 async function runAction(ruleName: string, taskId: string, action: Action): Promise<boolean> {
   switch (action.type) {
-    case 'set_priority': {
+    case 'set_priority':
+    case 'raise_priority': {
       const value = (action.value ?? 'high') as Priority
       const current = await prisma.task.findUnique({
         where: { id: taskId },
         select: { priority: true },
       })
       if (!current || current.priority === value) return false
+      // «Поднять» не должно понижать: Critical остаётся Critical.
+      if (
+        action.type === 'raise_priority' &&
+        PRIORITY_ORDER[current.priority as Priority] <= PRIORITY_ORDER[value]
+      ) {
+        return false
+      }
       await prisma.task.update({ where: { id: taskId }, data: { priority: value } })
       await record({
         taskId,
         actorId: null,
         kind: 'automation',
-        note: `подняла приоритет по правилу «${ruleName}»`,
+        note:
+          action.type === 'raise_priority'
+            ? `подняла приоритет по правилу «${ruleName}»`
+            : `изменила приоритет по правилу «${ruleName}»`,
         field: 'priority',
         fromValue: PRIORITY_LABEL[current.priority as Priority] ?? current.priority,
         toValue: PRIORITY_LABEL[value] ?? value,

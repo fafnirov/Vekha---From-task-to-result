@@ -1,25 +1,39 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './ui'
 import { NAV_ADMIN, NAV_MAIN, type NavItem } from '../lib/nav'
-import { CURRENT_USER, ORG, PEOPLE } from '../data/catalog'
+import { useProjects, useQueues, useTasks } from '../api/hooks'
+import { useSession } from '../store/session'
 import { useApp } from '../store/app'
 
 function isActive(item: NavItem, pathname: string): boolean {
   if (item.to === '/') return pathname === '/'
-  return (
-    pathname.startsWith(item.to) ||
-    (item.also ?? []).some((p) => pathname.startsWith(p))
-  )
+  return pathname.startsWith(item.to) || (item.also ?? []).some((p) => pathname.startsWith(p))
 }
 
 export function Sidebar() {
-  const { navCollapsed, toggleNav, theme, toggleTheme, toast } = useApp()
+  const { navCollapsed, toggleNav, theme, toggleTheme, toast, toastError } = useApp()
+  const { me, org, logout } = useSession()
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
+
   const expanded = !navCollapsed
-  const me = PEOPLE[CURRENT_USER]
+
+  /* Счётчики берутся из тех же запросов, что и экраны, поэтому не расходятся. */
+  const queues = useQueues()
+  const projects = useProjects()
+  const tasks = useTasks({ perPage: 1, category: 'todo,inprogress,blocked' })
+
+  const counts: Record<NonNullable<NavItem['count']>, number | undefined> = {
+    tasks: tasks.data?.total,
+    queues: queues.data?.length,
+    projects: projects.data?.length,
+  }
 
   const renderItem = (item: NavItem) => {
     const on = isActive(item, pathname)
+    const count = item.count ? counts[item.count] : undefined
     return (
       <NavLink
         key={item.to}
@@ -29,11 +43,18 @@ export function Sidebar() {
       >
         <Icon name={item.icon} size={17} />
         {expanded && <span className="nav__label">{item.label}</span>}
-        {expanded && item.count !== undefined && (
-          <span className="nav__count">{item.count}</span>
-        )}
+        {expanded && count !== undefined && <span className="nav__count">{count}</span>}
       </NavLink>
     )
+  }
+
+  async function signOut() {
+    try {
+      await logout()
+      navigate('/')
+    } catch (err) {
+      toastError(err, 'Не удалось выйти')
+    }
   }
 
   return (
@@ -43,7 +64,7 @@ export function Sidebar() {
           <i />
         </div>
         {expanded && <div className="sidebar__name">Vekha</div>}
-        {expanded && <div className="sidebar__ver">{ORG.version}</div>}
+        {expanded && <div className="sidebar__ver">{org.version}</div>}
         <button
           type="button"
           className="sidebar__collapse"
@@ -58,15 +79,15 @@ export function Sidebar() {
       <button
         type="button"
         className="org"
-        onClick={() => toast('Рабочее пространство', ORG.name, 'info')}
+        onClick={() => toast('Рабочее пространство', `${org.name} · ${org.unit}`, 'info')}
       >
-        <span className="org__mark">{ORG.mark}</span>
+        <span className="org__mark">{org.mark}</span>
         {expanded && (
           <span style={{ minWidth: 0, flex: 1 }}>
             <span className="org__name ellipsis" style={{ display: 'block' }}>
-              {ORG.name}
+              {org.name}
             </span>
-            <span className="org__sub">{ORG.unit}</span>
+            <span className="org__sub">{org.unit}</span>
           </span>
         )}
         {expanded && <Icon name="unfold_more" size={16} color="var(--tx3)" />}
@@ -83,40 +104,64 @@ export function Sidebar() {
         {NAV_ADMIN.map(renderItem)}
       </nav>
 
-      <div className="sidebar__foot">
-        <span className="av av--lg" style={{ background: me.bg, color: me.fg }}>
-          {me.who}
-        </span>
-        {expanded && (
-          <div className="sidebar__me">
-            <b>{me.name}</b>
-            <span>{me.role}</span>
-          </div>
-        )}
+      <div className="sidebar__foot" style={{ position: 'relative' }}>
+        <button
+          type="button"
+          className="av av--lg"
+          style={{ background: me?.bg, color: me?.fg, border: 0, cursor: 'pointer' }}
+          onClick={() => setMenuOpen((v) => !v)}
+          title={me?.name}
+        >
+          {me?.who}
+        </button>
         {expanded && (
           <button
             type="button"
-            className="sidebar__tool"
-            title="Дизайн-система"
-            onClick={() =>
-              toast(
-                'Дизайн-система Vekha',
-                'Токены, компоненты и состояния — в styles/',
-                'info',
-              )
-            }
+            className="sidebar__me"
+            onClick={() => setMenuOpen((v) => !v)}
+            style={{ background: 'none', border: 0, textAlign: 'left', cursor: 'pointer', padding: 0 }}
           >
-            <Icon name="palette" size={16} />
+            <b>{me?.name}</b>
+            <span>{me?.role}</span>
           </button>
         )}
-        <button
-          type="button"
-          className="sidebar__tool"
-          title="Сменить тему"
-          onClick={toggleTheme}
-        >
+        <button type="button" className="sidebar__tool" title="Сменить тему" onClick={toggleTheme}>
           <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={16} />
         </button>
+
+        {menuOpen && (
+          <>
+            <div className="scrim scrim--bare" onClick={() => setMenuOpen(false)} />
+            <div className="menu" style={{ bottom: 52, left: 10, width: 200 }}>
+              <div className="menu__head">
+                <b>{me?.name}</b>
+                <span>{me?.email}</span>
+              </div>
+              <button
+                type="button"
+                className="menu__item"
+                onClick={() => {
+                  setMenuOpen(false)
+                  navigate('/workflow?tab=people')
+                }}
+              >
+                <Icon name="manage_accounts" size={17} color="var(--tx2)" />
+                <span style={{ flex: 1, fontSize: 12.5 }}>Участники и права</span>
+              </button>
+              <button
+                type="button"
+                className="menu__item"
+                onClick={() => {
+                  setMenuOpen(false)
+                  void signOut()
+                }}
+              >
+                <Icon name="logout" size={17} color="var(--dang)" />
+                <span style={{ flex: 1, fontSize: 12.5 }}>Выйти</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   )

@@ -1,429 +1,297 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Avatar, Icon, Segmented } from '../components/ui'
-import { PEOPLE } from '../data/catalog'
-import { findTask } from '../data/tasks'
-import {
-  BURNDOWN_DAYS,
-  OVERDUE,
-  REPORT_KPIS,
-  REPORT_WORKLOAD,
-  SPRINT_METRICS,
-  STATUS_SPLIT,
-  THROUGHPUT,
-  WIDGET_LIBRARY,
-} from '../data/workspace'
-import { useApp } from '../store/app'
+import { Avatar, Empty, Progress, SectionTitle, TaskKey } from '../components/ui'
+import { useBurndown, useQueues, useReports } from '../api/hooks'
 
-const PERIODS = [
-  { value: 'sprint', label: 'Спринт' },
-  { value: 'month', label: 'Месяц' },
-  { value: 'quarter', label: 'Квартал' },
-] as const
-
-const PERIOD_LABEL: Record<string, string> = {
-  sprint: '12–25 авг',
-  month: 'август',
-  quarter: 'Q3 2026',
-}
-
-/** Conic-gradient stops for the status donut. */
-function donutGradient(): string {
-  const total = STATUS_SPLIT.reduce((s, x) => s + x.n, 0)
-  let acc = 0
-  const stops = STATUS_SPLIT.map((s) => {
-    const from = (acc / total) * 360
-    acc += s.n
-    const to = (acc / total) * 360
-    return `${s.c} ${from}deg ${to}deg`
-  })
-  return `conic-gradient(${stops.join(',')})`
-}
+const WEEK_OPTIONS = [8, 12, 16, 26]
 
 export function Reports() {
   const nav = useNavigate()
-  const { toast } = useApp()
-  const [period, setPeriod] = useState<(typeof PERIODS)[number]['value']>('sprint')
-  const [loading, setLoading] = useState(false)
-  const [widgetMenu, setWidgetMenu] = useState(false)
+  const [queue, setQueue] = useState('')
+  const [weeks, setWeeks] = useState(8)
 
-  const donut = useMemo(donutGradient, [])
-  const total = STATUS_SPLIT.reduce((s, x) => s + x.n, 0)
+  const queues = useQueues()
+  const reports = useReports({ queue: queue || undefined, weeks })
+  const burndown = useBurndown({ queue: queue || undefined })
 
-  const refresh = () => {
-    setLoading(true)
-    window.setTimeout(() => {
-      setLoading(false)
-      toast('Отчёты обновлены', `Период: ${PERIOD_LABEL[period]}`)
-    }, 700)
+  const data = reports.data
+
+  if (reports.isLoading) {
+    return (
+      <div className="page">
+        <div className="skel skel--block" style={{ height: 320 }} />
+      </div>
+    )
   }
 
   return (
     <div className="page">
-      <div className="page__head" style={{ flexWrap: 'wrap' }}>
+      <div className="page__head">
         <div className="page__title">Отчёты</div>
-        <Segmented options={PERIODS} value={period} onChange={setPeriod} style={{ marginLeft: 6 }} />
-        <button type="button" className="btn btn--secondary spacer" onClick={refresh}>
-          <Icon name="refresh" size={16} />
-          Обновить
-        </button>
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => setWidgetMenu(!widgetMenu)}
-          >
-            <Icon name="add" size={16} />
-            Виджет
-          </button>
-          {widgetMenu && (
-            <div
-              className="menu"
-              style={{ top: 32, right: 0, width: 236, maxHeight: 300, overflow: 'auto' }}
-            >
-              <div className="vk-eyebrow" style={{ padding: '5px 8px 6px' }}>
-                Библиотека виджетов
-              </div>
-              {WIDGET_LIBRARY.map((wl) => (
-                <button
-                  key={wl.label}
-                  type="button"
-                  className="menu__item"
-                  onClick={() => {
-                    setWidgetMenu(false)
-                    toast('Виджет добавлен', wl.label)
-                  }}
-                >
-                  <Icon name={wl.icon} size={16} color="var(--tx2)" />
-                  <span style={{ flex: 1 }}>{wl.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button
-          type="button"
-          className="btn btn--secondary"
-          onClick={() => toast('Экспорт', 'Отчёт выгружается в XLSX', 'info')}
+        <span className="page__note">всё считается по текущим данным трекера</span>
+
+        <select
+          className="select select--sm spacer"
+          value={queue}
+          onChange={(e) => setQueue(e.target.value)}
         >
-          <Icon name="download" size={16} />
-          Экспорт
-        </button>
+          <option value="">Все очереди</option>
+          {(queues.data ?? []).map((q) => (
+            <option key={q.id} value={q.key}>
+              {q.key}
+            </option>
+          ))}
+        </select>
+        <select
+          className="select select--sm"
+          value={weeks}
+          onChange={(e) => setWeeks(Number(e.target.value))}
+        >
+          {WEEK_OPTIONS.map((w) => (
+            <option key={w} value={w}>
+              {w} недель
+            </option>
+          ))}
+        </select>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4,1fr)',
-          gap: 10,
-          marginBottom: 12,
-        }}
-      >
-        {REPORT_KPIS.map((k) => (
-          <div key={k.label} className="card" style={{ padding: '11px 12px', borderRadius: 9 }}>
-            <div style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{k.label}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 5 }}>
-              <span className="mono" style={{ fontSize: 22, fontWeight: 600, color: k.fg }}>
-                {k.value}
-              </span>
-              <span style={{ fontSize: 11.5, color: k.deltaFg }}>{k.delta}</span>
+      <div className="home__kpis">
+        {(data?.kpis ?? []).map((k) => (
+          <div key={k.label} className="card card--pad kpi">
+            <div className="kpi__label">{k.label}</div>
+            <div className="kpi__value mono" style={{ color: k.fg }}>
+              {k.value}
+            </div>
+            <div className="kpi__note" style={{ color: k.deltaFg }}>
+              {k.delta}
             </div>
           </div>
         ))}
       </div>
 
-      <div
-        className="split"
-        style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)' }}
-      >
+      <div className="split" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px', marginTop: 12 }}>
         <div className="stack">
+          {/* ── Burndown ─────────────────────────────────────────────── */}
           <section className="card card--pad">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-              <Icon
-                name="drag_indicator"
-                size={16}
-                color="var(--border2)"
-                title="Перетащите, чтобы переставить виджет"
-              />
-              <div className="card__title">Burndown · Sprint 24</div>
-              <span className="count-pill" style={{ fontSize: 10.5 }}>
-                {PERIOD_LABEL[period]}
-              </span>
-              <div className="spacer" style={{ display: 'flex', gap: 11, alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--tx2)' }}>
-                  <span style={{ width: 14, height: 2, background: 'var(--border2)' }} />
-                  план
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--tx2)' }}>
-                  <span style={{ width: 14, height: 2, background: 'var(--ac)' }} />
-                  факт
-                </div>
-              </div>
-            </div>
-            {loading ? (
-              <div className="skel skel--block" />
-            ) : (
-              <div style={{ position: 'relative', height: 168 }}>
-                <svg
-                  viewBox="0 0 520 168"
-                  preserveAspectRatio="none"
-                  style={{ width: '100%', height: '100%', display: 'block', overflow: 'visible' }}
-                  role="img"
-                  aria-label="График сгорания задач спринта"
-                >
-                  <line x1="0" y1="42" x2="520" y2="42" stroke="var(--grid)" strokeWidth="1" />
-                  <line x1="0" y1="84" x2="520" y2="84" stroke="var(--grid)" strokeWidth="1" />
-                  <line x1="0" y1="126" x2="520" y2="126" stroke="var(--grid)" strokeWidth="1" />
-                  <line x1="0" y1="167" x2="520" y2="167" stroke="var(--border)" strokeWidth="1" />
-                  <polyline
-                    points="0,8 74,32 148,56 222,80 296,104 370,128 444,152 518,166"
-                    fill="none"
-                    stroke="var(--border2)"
-                    strokeWidth="1.5"
-                    strokeDasharray="5 4"
-                  />
-                  <polyline
-                    points="0,8 74,26 148,48 222,52 296,86 370,96 444,124"
-                    fill="none"
-                    stroke="var(--ac)"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  <circle cx="444" cy="124" r="3.5" fill="var(--ac)" />
-                </svg>
-                <div
-                  className="mono"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: 10.5,
-                    color: 'var(--tx3)',
-                    marginTop: 5,
-                  }}
-                >
-                  {BURNDOWN_DAYS.map((d) => (
-                    <span key={d}>{d}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <SectionTitle right={<span className="mono report__hint">{burndown.data?.sprint ?? '—'}</span>}>
+              Burndown спринта
+            </SectionTitle>
+            <Burndown points={burndown.data?.points ?? []} total={burndown.data?.total ?? 0} />
           </section>
 
+          {/* ── Пропускная способность ───────────────────────────────── */}
           <section className="card card--pad">
-            <div className="card__title" style={{ marginBottom: 12 }}>
-              Закрытые задачи по неделям
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 132 }}>
-              {THROUGHPUT.map((th) => (
-                <div
-                  key={th.label}
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 6,
-                    height: '100%',
-                    justifyContent: 'flex-end',
-                  }}
-                >
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>
-                    {th.n}
-                  </span>
-                  <div
-                    className="chart-bar"
-                    style={{ height: th.h, background: 'var(--ac)' }}
-                    title={`${th.label}: ${th.n} задач`}
-                  />
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>
-                    {th.label}
-                  </span>
+            <SectionTitle right={<span className="report__hint">закрыто задач по неделям</span>}>
+              Пропускная способность
+            </SectionTitle>
+            <div className="chart">
+              {(data?.throughput ?? []).map((t) => (
+                <div key={t.label} className="chart__col" title={`${t.label}: ${t.n}`}>
+                  <span className="chart__value mono">{t.n}</span>
+                  <span className="chart-bar" style={{ height: t.h }} />
+                  <span className="chart__label mono">{t.label}</span>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="card card--clip">
-            <div className="card__head">
-              <Icon name="schedule" size={16} color="var(--dang)" />
-              <div className="card__title">Просрочки</div>
-              <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-                {OVERDUE.length} задачи
-              </span>
-            </div>
-            {OVERDUE.map((o) => {
-              const t = findTask(o.key)
-              return (
-                <div
-                  key={o.key}
-                  className="row"
-                  style={{
-                    gridTemplateColumns: '88px minmax(0,1fr) 26px 96px 84px',
-                    height: 34,
-                  }}
-                  onClick={() => nav(`/tasks/${o.key}`)}
-                >
-                  <span className="key">{t.key}</span>
-                  <span className="ellipsis" style={{ fontSize: 12.5 }}>
-                    {t.title}
-                  </span>
-                  <Avatar id={t.who} />
-                  <span className="ellipsis" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
-                    {t.project}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11.5,
-                      color: 'var(--dang)',
-                      fontWeight: 500,
-                      textAlign: 'right',
-                    }}
-                  >
-                    {o.late}
-                  </span>
-                </div>
-              )
-            })}
-          </section>
-        </div>
-
-        <div className="stack">
+          {/* ── Нагрузка ─────────────────────────────────────────────── */}
           <section className="card card--pad">
-            <div className="card__title" style={{ marginBottom: 12 }}>
-              Распределение по статусам
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div
-                style={{
-                  width: 112,
-                  height: 112,
-                  borderRadius: '50%',
-                  background: donut,
-                  flex: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                role="img"
-                aria-label="Диаграмма распределения задач по статусам"
-              >
-                <div className="donut__hole">
-                  <span className="mono" style={{ fontSize: 17, fontWeight: 600 }}>
-                    {total}
-                  </span>
-                  <span style={{ fontSize: 10, color: 'var(--tx3)' }}>задач</span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0, flex: 1 }}>
-                {STATUS_SPLIT.map((ss) => (
-                  <div
-                    key={ss.label}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      fontSize: 11.5,
-                      color: 'var(--tx2)',
-                    }}
-                  >
-                    <span
-                      style={{ width: 8, height: 8, borderRadius: 2, background: ss.c, flex: 'none' }}
-                    />
-                    <span className="ellipsis" style={{ flex: 1 }}>
-                      {ss.label}
-                    </span>
-                    <span className="mono" style={{ color: 'var(--tx)' }}>
-                      {ss.n}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
+            <SectionTitle right={<span className="report__hint">открытые SP и распределение задач</span>}>
+              Нагрузка сотрудников
+            </SectionTitle>
 
-          <section className="card card--pad">
-            <div className="card__title" style={{ marginBottom: 12 }}>
-              Нагрузка по сотрудникам
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {REPORT_WORKLOAD.map((w) => (
-                <div key={w.id}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <Avatar id={w.id} title={false} />
-                    <span className="ellipsis" style={{ fontSize: 12, flex: 1 }}>
-                      {PEOPLE[w.id].name}
-                    </span>
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--tx2)' }}>
-                      {w.sp} SP
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      height: 7,
-                      borderRadius: 4,
-                      overflow: 'hidden',
-                      background: 'var(--n-bg)',
-                    }}
-                  >
-                    <div style={{ width: w.doneW, background: 'var(--ok)' }} />
-                    <div style={{ width: w.progW, background: 'var(--ac)' }} />
-                    <div style={{ width: w.todoW, background: 'var(--border2)' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="card card--pad">
-            <div className="card__title" style={{ marginBottom: 10 }}>
-              Метрики спринтов
-            </div>
-            <div
-              className="vk-eyebrow"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0,1fr) 54px 54px 54px',
-                gap: 8,
-                padding: '0 4px 6px',
-                letterSpacing: '0.03em',
-              }}
-            >
-              <span>Спринт</span>
-              <span style={{ textAlign: 'right' }}>План</span>
-              <span style={{ textAlign: 'right' }}>Факт</span>
-              <span style={{ textAlign: 'right' }}>%</span>
-            </div>
-            {SPRINT_METRICS.map((sm) => (
-              <div
-                key={sm.label}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0,1fr) 54px 54px 54px',
-                  gap: 8,
-                  padding: '5px 4px',
-                  borderTop: '1px solid var(--border)',
-                  fontSize: 12,
-                }}
-              >
-                <span>{sm.label}</span>
-                <span className="mono" style={{ textAlign: 'right', color: 'var(--tx2)' }}>
-                  {sm.plan}
+            {(data?.workload ?? []).map((w) => (
+              <div key={w.id} className="workload">
+                <Avatar id={w.code} size="md" />
+                <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                  {w.name}
                 </span>
-                <span className="mono" style={{ textAlign: 'right', color: 'var(--tx2)' }}>
-                  {sm.fact}
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
+                  {w.sp} SP
                 </span>
-                <span
-                  className="mono"
-                  style={{ textAlign: 'right', color: sm.fg, fontWeight: 500 }}
-                >
-                  {sm.pct}
+                <span className="workload__bar">
+                  <span style={{ width: w.doneW, background: 'var(--ok)' }} title={`Готово ${w.doneW}`} />
+                  <span style={{ width: w.progW, background: 'var(--ac)' }} title={`В работе ${w.progW}`} />
+                  <span style={{ width: w.todoW, background: 'var(--border2)' }} title={`Осталось ${w.todoW}`} />
+                </span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
+                  {w.tasks}
                 </span>
               </div>
             ))}
           </section>
         </div>
+
+        <aside className="stack">
+          {/* ── Кольцо статусов ──────────────────────────────────────── */}
+          <section className="card card--pad">
+            <SectionTitle>Распределение по статусам</SectionTitle>
+            <Donut slices={data?.statusSplit ?? []} />
+          </section>
+
+          {/* ── Метрики спринтов ─────────────────────────────────────── */}
+          <section className="card card--pad">
+            <SectionTitle>Спринты</SectionTitle>
+            {(data?.sprintMetrics ?? []).length === 0 && (
+              <div className="task__none" style={{ padding: 0 }}>
+                Спринтов нет
+              </div>
+            )}
+            {(data?.sprintMetrics ?? []).map((s) => (
+              <div key={s.label} className="sprint-metric">
+                <span style={{ fontSize: 12, flex: 1 }}>{s.label}</span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
+                  {s.fact}/{s.plan} SP
+                </span>
+                <span className="mono" style={{ fontSize: 11.5, color: s.fg, width: 40, textAlign: 'right' }}>
+                  {s.pct}
+                </span>
+                <Progress
+                  pct={s.pct}
+                  color={s.fg}
+                  variant="thin"
+                  style={{ gridColumn: '1 / -1', marginTop: 4 }}
+                />
+              </div>
+            ))}
+          </section>
+
+          {/* ── Просрочки ────────────────────────────────────────────── */}
+          <section className="card card--clip">
+            <div className="card__head">
+              <div className="card__title">Просрочки</div>
+              <span className="count-pill">{data?.overdue.length ?? 0}</span>
+            </div>
+            {(data?.overdue ?? []).length === 0 && (
+              <Empty icon="task_alt" title="Просрочек нет" text="Все дедлайны соблюдаются." />
+            )}
+            {(data?.overdue ?? []).map((o) => (
+              <div
+                key={o.key}
+                className="row"
+                style={{ gridTemplateColumns: '92px minmax(0,1fr) 70px', gap: 8 }}
+                onClick={() => nav(`/tasks/${o.key}`)}
+              >
+                <TaskKey>{o.key}</TaskKey>
+                <span className="ellipsis" style={{ fontSize: 12 }}>
+                  {o.title}
+                </span>
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--dang)', textAlign: 'right' }}>
+                  {o.late}
+                </span>
+              </div>
+            ))}
+          </section>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+/** Простой линейный график: остаток против идеальной прямой. */
+function Burndown({
+  points,
+  total,
+}: {
+  points: { label: string; remaining: number; ideal: number }[]
+  total: number
+}) {
+  const W = 560
+  const H = 170
+  const pad = 26
+
+  const path = useMemo(() => {
+    if (points.length < 2) return { real: '', ideal: '' }
+    const max = Math.max(total, ...points.map((p) => p.remaining), 1)
+    const x = (i: number) => pad + (i / (points.length - 1)) * (W - pad * 2)
+    const y = (v: number) => H - pad - (v / max) * (H - pad * 2)
+    const line = (get: (p: (typeof points)[number]) => number) =>
+      points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(get(p)).toFixed(1)}`).join(' ')
+    return { real: line((p) => p.remaining), ideal: line((p) => p.ideal) }
+  }, [points, total])
+
+  if (points.length < 2) {
+    return (
+      <div className="task__none" style={{ padding: '20px 0' }}>
+        Данных пока мало — график появится после нескольких дней спринта
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="report__chart"
+        role="img"
+        aria-label="Диаграмма сгорания: фактический остаток против идеального"
+      >
+        <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} stroke="var(--border)" />
+        <line x1={pad} y1={pad} x2={pad} y2={H - pad} stroke="var(--border)" />
+        <path d={path.ideal} fill="none" stroke="var(--border2)" strokeWidth={1.5} strokeDasharray="4 4" />
+        <path d={path.real} fill="none" stroke="var(--ac)" strokeWidth={2} />
+      </svg>
+      <div className="report__legend">
+        <span>
+          <i style={{ background: 'var(--ac)' }} /> остаток
+        </span>
+        <span>
+          <i style={{ background: 'var(--border2)' }} /> идеальный темп
+        </span>
+        <span className="spacer mono">{points[points.length - 1].remaining} SP осталось</span>
+      </div>
+    </div>
+  )
+}
+
+function Donut({ slices }: { slices: { label: string; n: number; c: string }[] }) {
+  const total = slices.reduce((sum, s) => sum + s.n, 0)
+  if (total === 0) return <div className="task__none">Нет данных</div>
+
+  let offset = 0
+  const R = 54
+  const C = 2 * Math.PI * R
+
+  return (
+    <div className="donut">
+      <svg viewBox="0 0 140 140" role="img" aria-label="Распределение задач по статусам">
+        {slices.map((s) => {
+          const len = (s.n / total) * C
+          const dash = `${len} ${C - len}`
+          const el = (
+            <circle
+              key={s.label}
+              cx="70"
+              cy="70"
+              r={R}
+              fill="none"
+              stroke={s.c}
+              strokeWidth="16"
+              strokeDasharray={dash}
+              strokeDashoffset={-offset}
+              transform="rotate(-90 70 70)"
+            />
+          )
+          offset += len
+          return el
+        })}
+        <text x="70" y="66" textAnchor="middle" className="donut__num">
+          {total}
+        </text>
+        <text x="70" y="82" textAnchor="middle" className="donut__cap">
+          задач
+        </text>
+      </svg>
+
+      <div className="donut__legend">
+        {slices.map((s) => (
+          <div key={s.label}>
+            <i style={{ background: s.c }} />
+            <span style={{ flex: 1 }}>{s.label}</span>
+            <span className="mono">{s.n}</span>
+          </div>
+        ))}
       </div>
     </div>
   )

@@ -1,26 +1,24 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Icon } from './ui'
-import { CRUMBS, CREATE_ITEMS } from '../lib/nav'
-import { NOTIFICATIONS } from '../data/feed'
-import { ORG, PEOPLE } from '../data/catalog'
-import { findTask } from '../data/tasks'
+import { Avatar, Icon } from './ui'
+import { CRUMBS } from '../lib/nav'
+import { api } from '../api/client'
+import { useInvalidate, useNotifications } from '../api/hooks'
+import { useSession } from '../store/session'
 import { useUi } from '../store/ui'
 import { useApp } from '../store/app'
 
-function useCrumbs(): { label: string; to?: string }[] {
+function useCrumbs(orgName: string): { label: string; to?: string }[] {
   const { pathname } = useLocation()
-  const trail: { label: string; to?: string }[] = [{ label: ORG.name, to: '/' }]
+  const trail: { label: string; to?: string }[] = [{ label: orgName, to: '/' }]
 
   if (pathname.startsWith('/tasks/')) {
-    const key = decodeURIComponent(pathname.slice('/tasks/'.length))
     trail.push({ label: 'Задачи', to: '/tasks' })
-    trail.push({ label: findTask(key).key })
+    trail.push({ label: decodeURIComponent(pathname.slice('/tasks/'.length)) })
     return trail
   }
   if (pathname.startsWith('/projects/')) {
-    const name = decodeURIComponent(pathname.slice('/projects/'.length))
     trail.push({ label: 'Проекты', to: '/projects' })
-    trail.push({ label: name })
+    trail.push({ label: decodeURIComponent(pathname.slice('/projects/'.length)) })
     return trail
   }
   trail.push({ label: CRUMBS[pathname] ?? 'Главная' })
@@ -29,10 +27,60 @@ function useCrumbs(): { label: string; to?: string }[] {
 
 export function TopBar() {
   const nav = useNavigate()
-  const crumbs = useCrumbs()
   const ui = useUi()
-  const { toast } = useApp()
-  const unread = NOTIFICATIONS.filter((n) => n.unread).length
+  const { org, can } = useSession()
+  const { toast, toastError } = useApp()
+  const crumbs = useCrumbs(org.name)
+  const invalidate = useInvalidate()
+
+  const notifications = useNotifications()
+  const items = notifications.data?.items ?? []
+  const unread = notifications.data?.unread ?? 0
+
+  async function readAll() {
+    try {
+      await api.post('/api/notifications/read')
+      invalidate(['notifications'])
+      toast('Уведомления', 'Все отмечены прочитанными', 'ok')
+    } catch (err) {
+      toastError(err)
+    }
+    ui.closeAll()
+  }
+
+  const createItems = [
+    { label: 'Задача', icon: 'add_task', kb: 'C', action: () => ui.openCreateModal() },
+    {
+      label: 'Проект',
+      icon: 'folder_open',
+      kb: 'P',
+      action: () => {
+        ui.closeAll()
+        nav('/projects?new=1')
+      },
+      need: 'sprint.manage',
+    },
+    {
+      label: 'Очередь',
+      icon: 'layers',
+      kb: 'Q',
+      action: () => {
+        ui.closeAll()
+        nav('/queues?new=1')
+      },
+      need: 'workflow.manage',
+    },
+    {
+      label: 'Правило автоматизации',
+      icon: 'bolt',
+      kb: 'A',
+      action: () => {
+        ui.closeAll()
+        nav('/workflow?tab=rules&new=1')
+      },
+      need: 'workflow.manage',
+    },
+  ].filter((i) => !i.need || can(i.need))
 
   return (
     <header className="topbar">
@@ -54,11 +102,7 @@ export function TopBar() {
       </button>
 
       <div className="topbar__tools">
-        <button
-          type="button"
-          className="topbar__create"
-          onClick={ui.toggleCreateMenu}
-        >
+        <button type="button" className="topbar__create" onClick={ui.toggleCreateMenu}>
           <Icon name="add" size={17} />
           Создать
         </button>
@@ -88,94 +132,62 @@ export function TopBar() {
       </div>
 
       {ui.createOpen && (
-        <div className="menu" style={{ top: 46, right: 96, width: 238 }}>
-          {CREATE_ITEMS.map((ci) => (
-            <button
-              key={ci.label}
-              type="button"
-              className="menu__item"
-              onClick={() => {
-                if (ci.label === 'Задача') ui.openCreateModal()
-                else {
-                  ui.closeAll()
-                  toast('Создание', `${ci.label} — форма откроется в диалоге`, 'info')
-                }
-              }}
-            >
-              <Icon name={ci.icon} size={17} color="var(--tx2)" />
-              <span style={{ flex: 1, fontSize: 12.5 }}>{ci.label}</span>
-              <span className="menu__kb">{ci.kb}</span>
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="scrim scrim--bare" onClick={ui.closeAll} />
+          <div className="menu" style={{ top: 46, right: 96, width: 238 }}>
+            {createItems.map((ci) => (
+              <button key={ci.label} type="button" className="menu__item" onClick={ci.action}>
+                <Icon name={ci.icon} size={17} color="var(--tx2)" />
+                <span style={{ flex: 1, fontSize: 12.5 }}>{ci.label}</span>
+                <span className="menu__kb">{ci.kb}</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {ui.notifOpen && (
-        <div
-          className="menu"
-          style={{ top: 46, right: 52, width: 330, padding: 0, overflow: 'hidden' }}
-        >
+        <>
+          <div className="scrim scrim--bare" onClick={ui.closeAll} />
           <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '9px 12px',
-              borderBottom: '1px solid var(--border)',
-            }}
+            className="menu"
+            style={{ top: 46, right: 52, width: 340, padding: 0, overflow: 'hidden' }}
           >
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>Уведомления</div>
-            <button
-              type="button"
-              className="btn btn--link spacer"
-              style={{ fontSize: 11.5 }}
-              onClick={() => {
-                ui.closeAll()
-                toast('Уведомления', 'Все отмечены прочитанными', 'ok')
-              }}
-            >
-              Прочитать все
-            </button>
-          </div>
-          {NOTIFICATIONS.map((n) => {
-            const p = PEOPLE[n.who]
-            return (
-              <Link
-                key={n.key + n.time}
-                to={`/tasks/${n.key}`}
-                onClick={ui.closeAll}
-                style={{
-                  display: 'flex',
-                  gap: 9,
-                  padding: '10px 12px',
-                  borderBottom: '1px solid var(--border)',
-                  background: n.unread ? 'var(--ac-soft)' : 'transparent',
-                  color: 'inherit',
-                  textDecoration: 'none',
-                }}
+            <div className="notif__head">
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Уведомления</div>
+              {unread > 0 && <span className="count-pill">{unread}</span>}
+              <button
+                type="button"
+                className="btn btn--link spacer"
+                style={{ fontSize: 11.5 }}
+                onClick={() => void readAll()}
               >
-                <span className="av" style={{ background: p.bg, color: p.fg }}>
-                  {p.who}
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12, color: 'var(--tx)' }}>
-                    {n.text}
+                Прочитать все
+              </button>
+            </div>
+
+            <div className="notif__list">
+              {items.length === 0 && <div className="notif__empty">Пока ничего нового</div>}
+              {items.slice(0, 12).map((n) => (
+                <Link
+                  key={n.id}
+                  to={n.key ? `/tasks/${n.key}` : '/'}
+                  onClick={ui.closeAll}
+                  className={n.unread ? 'notif notif--unread' : 'notif'}
+                >
+                  <Avatar id={n.who} size="base" title={false} />
+                  <span style={{ minWidth: 0 }}>
+                    <span className="notif__text">{n.text}</span>
+                    <span className="notif__meta mono">
+                      {n.key ? `${n.key} · ` : ''}
+                      {n.time}
+                    </span>
                   </span>
-                  <span
-                    className="mono"
-                    style={{
-                      display: 'block',
-                      fontSize: 11,
-                      color: 'var(--tx3)',
-                      marginTop: 2,
-                    }}
-                  >
-                    {n.key} · {n.time}
-                  </span>
-                </span>
-              </Link>
-            )
-          })}
-        </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </header>
   )

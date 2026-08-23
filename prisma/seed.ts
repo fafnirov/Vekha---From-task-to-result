@@ -371,7 +371,7 @@ const RULES = [
     name: 'Просроченные задачи поднимают приоритет',
     trigger: 'schedule',
     condition: { all: [{ field: 'overdue', op: 'is', value: true }] },
-    actions: [{ type: 'set_priority', value: 'high' }],
+    actions: [{ type: 'raise_priority', value: 'high' }],
     icon: 'schedule', iconFg: 'var(--dang)', enabled: true, runs: 86,
   },
   {
@@ -674,15 +674,24 @@ async function main() {
 
     for (let i = 0; i < count; i += 1) {
       num += 1
-      // Закрытия распределены по последним десяти неделям.
+      // Каждая пятая историческая задача осталась незакрытой: так проекты
+      // показывают правдоподобный, а не почти стопроцентный прогресс.
+      const open = rand() < 0.22
+
       const closedAt = day(-Math.floor(rand() * 70) - 1, 11 + Math.floor(rand() * 7))
-      const createdAt = new Date(closedAt.getTime() - (1 + Math.floor(rand() * 9)) * 86_400_000)
-      const assignee = pick(codes)
-      // Примерно каждая пятая задача закрывалась с опозданием.
+      const createdAt = open
+        ? day(-Math.floor(rand() * 40) - 3, 10)
+        : new Date(closedAt.getTime() - (1 + Math.floor(rand() * 9)) * 86_400_000)
+
+      // Примерно каждая пятая закрытая задача не уложилась в срок.
       const slip = rand() < 0.22 ? 1 + Math.floor(rand() * 5) : -Math.floor(rand() * 3)
-      const dueDate = new Date(closedAt.getTime() - slip * 86_400_000)
+      const dueDate = open
+        ? day(Math.floor(rand() * 40) + 2, 18)
+        : new Date(closedAt.getTime() - slip * 86_400_000)
+
+      const status = open ? pick(['New', 'Open', 'Open', 'In Progress', 'Review']) : 'Done'
       const sprintName =
-        queueKey === 'VEKHA' ? pick(['Sprint 21', 'Sprint 22', 'Sprint 23']) : null
+        queueKey === 'VEKHA' && !open ? pick(['Sprint 21', 'Sprint 22', 'Sprint 23']) : null
 
       await prisma.task.create({
         data: {
@@ -690,9 +699,9 @@ async function main() {
           num,
           queueId: queue.id,
           title: pick(HISTORY_TITLES),
-          statusId: statusIds.get(`${queue.wf}|Done`)!,
+          statusId: statusIds.get(`${queue.wf}|${status}`)!,
           priority: pick(['low', 'medium', 'medium', 'high']),
-          assigneeId: userId(assignee),
+          assigneeId: rand() < 0.08 ? null : userId(pick(codes)),
           authorId: userId(pick(codes))!,
           projectId: projects.get(project.name)!,
           sprintId: sprintName ? sprints.get(sprintName)! : null,
@@ -700,7 +709,7 @@ async function main() {
           estimate: pick([1, 2, 3, 3, 5, 5, 8]),
           rank: num,
           createdAt,
-          closedAt,
+          closedAt: open ? null : closedAt,
         },
       })
     }

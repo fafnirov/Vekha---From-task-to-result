@@ -1,590 +1,302 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Avatar,
+  Empty,
   Icon,
   PriorityChip,
   Progress,
-  Segmented,
+  SectionTitle,
   StatusBadge,
   TaskKey,
 } from '../components/ui'
-import { ACTIVITY, ATTENTION, ATTENTION_REASONS, MENTIONS } from '../data/feed'
-import { CURRENT_USER, PEOPLE, dueColor } from '../data/catalog'
-import { PROJECTS } from '../data/projects'
-import { TASKS, findTask } from '../data/tasks'
-import { useApp } from '../store/app'
+import { dueColor } from '../data/catalog'
+import { useDashboard } from '../api/hooks'
+import { useSession } from '../store/session'
 import { useUi } from '../store/ui'
+import type { AttentionKind } from '../data/types'
 
-const ATTENTION_FILTERS = [
+const ATTENTION_TABS: { value: 'all' | AttentionKind; label: string }[] = [
   { value: 'all', label: 'Всё' },
-  { value: 'late', label: 'Просрочено' },
-  { value: 'mine', label: 'Ждёт меня' },
-] as const
-
-const MY_TABS = [
-  { value: 'progress', label: 'В работе' },
-  { value: 'review', label: 'На ревью' },
-  { value: 'all', label: 'Все мои' },
-] as const
-
-const KPIS = [
-  {
-    label: 'Мои задачи',
-    value: '6',
-    delta: '+2',
-    icon: 'assignment_ind',
-    bg: 'var(--ac-soft)',
-    fg: 'var(--ac)',
-    deltaFg: 'var(--tx3)',
-    to: '/tasks',
-  },
-  {
-    label: 'Требует внимания',
-    value: '2',
-    delta: 'сегодня',
-    icon: 'notification_important',
-    bg: 'var(--warn-bg)',
-    fg: 'var(--warn)',
-    deltaFg: 'var(--warn)',
-    to: '/tasks',
-  },
-  {
-    label: 'Просрочено',
-    value: '1',
-    delta: '−1',
-    icon: 'schedule',
-    bg: 'var(--dang-bg)',
-    fg: 'var(--dang)',
-    deltaFg: 'var(--ok)',
-    to: '/reports',
-  },
-  {
-    label: 'На ревью',
-    value: '3',
-    delta: '+1',
-    icon: 'rate_review',
-    bg: 'var(--vio-bg)',
-    fg: 'var(--vio)',
-    deltaFg: 'var(--tx3)',
-    to: '/board',
-  },
-  {
-    label: 'Закрыто за неделю',
-    value: '12',
-    delta: '+21%',
-    icon: 'task_alt',
-    bg: 'var(--ok-bg)',
-    fg: 'var(--ok)',
-    deltaFg: 'var(--ok)',
-    to: '/reports',
-  },
-]
-
-const SPRINT_BARS = [
-  { c: 'var(--ok)', label: 'Done', n: 12 },
-  { c: 'var(--ac)', label: 'In Progress', n: 8 },
-  { c: 'var(--warn)', label: 'Review', n: 5 },
-  { c: 'var(--border2)', label: 'To Do', n: 9 },
+  { value: 'overdue', label: 'Просрочено' },
+  { value: 'blocked', label: 'Блокировки' },
+  { value: 'today', label: 'Сегодня' },
+  { value: 'mention', label: 'Упоминания' },
+  { value: 'noassignee', label: 'Без исполнителя' },
 ]
 
 export function Home() {
   const nav = useNavigate()
-  const { statusOf } = useApp()
   const ui = useUi()
-  const [attFilter, setAttFilter] =
-    useState<(typeof ATTENTION_FILTERS)[number]['value']>('all')
-  const [myTab, setMyTab] = useState<(typeof MY_TABS)[number]['value']>('progress')
+  const { me } = useSession()
+  const dashboard = useDashboard()
+  const [tab, setTab] = useState<'all' | AttentionKind>('all')
 
-  const attention = useMemo(
-    () =>
-      ATTENTION.filter((a) => {
-        if (attFilter === 'late')
-          return a.kind === 'blocked' || a.kind === 'today' || a.kind === 'overdue'
-        if (attFilter === 'mine') return a.kind === 'review' || a.kind === 'mention'
-        return true
-      }),
-    [attFilter],
-  )
+  const data = dashboard.data
+  const reasons = data?.reasons
 
-  const myTasks = useMemo(() => {
-    const mine = TASKS.filter((t) => t.who === CURRENT_USER)
-    if (myTab === 'progress')
-      return mine.filter((t) => statusOf(t.key) === 'In Progress')
-    if (myTab === 'review') return mine.filter((t) => statusOf(t.key) === 'Review')
-    return mine
-  }, [myTab, statusOf])
+  const attention = (data?.attention ?? []).filter((a) => tab === 'all' || a.kind === tab)
+
+  const hour = new Date().getHours()
+  const greeting = hour < 5 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер'
 
   return (
-    <div style={{ padding: '16px 20px 30px', maxWidth: 1560 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, marginBottom: 14 }}>
+    <div className="page">
+      <div className="page__head">
         <div>
-          <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: '-0.015em' }}>
-            Доброе утро, Анна
+          <div className="page__title">
+            {greeting}, {me?.name.split(' ')[0]}
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginTop: 2 }}>
-            6 задач в работе · 2 требуют внимания · четверг, 21 августа
+          <div className="page__note" style={{ marginLeft: 0 }}>
+            {data?.sprint
+              ? `${data.sprint.name} · осталось ${data.sprint.daysLeft} дн.`
+              : 'Активного спринта нет'}
           </div>
         </div>
-        <div className="spacer" style={{ display: 'flex', gap: 6 }}>
-          <button
-            type="button"
-            className="btn btn--secondary"
-            onClick={() => nav('/board')}
-          >
-            <Icon name="view_kanban" size={16} />
-            Доска команды
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary"
-            onClick={() => nav('/backlog')}
-          >
-            <Icon name="rotate_right" size={16} />
-            Спринт
-          </button>
-          <button type="button" className="btn btn--primary" onClick={ui.openCreateModal}>
-            <Icon name="add" size={16} />
-            Задача
-          </button>
-        </div>
+        <button type="button" className="btn btn--primary spacer" onClick={ui.openCreateModal}>
+          <Icon name="add" size={16} />
+          Задача
+        </button>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5,minmax(0,1fr))',
-          gap: 8,
-          marginBottom: 12,
-        }}
-      >
-        {KPIS.map((k) => (
-          <button
-            key={k.label}
-            type="button"
-            className="card kpi"
-            onClick={() => nav(k.to)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '9px 11px',
-              borderRadius: 9,
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            <span
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: 7,
-                background: k.bg,
-                color: k.fg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flex: 'none',
-              }}
-            >
-              <Icon name={k.icon} size={16} />
-            </span>
-            <span style={{ minWidth: 0 }}>
-              <span
-                className="ellipsis"
-                style={{ display: 'block', fontSize: 11.5, color: 'var(--tx2)' }}
-              >
-                {k.label}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                <span
-                  className="mono"
-                  style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em' }}
-                >
-                  {k.value}
-                </span>
-                <span style={{ fontSize: 11, color: k.deltaFg, whiteSpace: 'nowrap' }}>
-                  {k.delta}
-                </span>
-              </span>
-            </span>
-          </button>
+      {/* ── KPI ────────────────────────────────────────────────────────── */}
+      <div className="home__kpis">
+        {(data?.kpis ?? []).map((k) => (
+          <div key={k.label} className="card card--pad kpi">
+            <div className="kpi__row">
+              <Icon name={k.icon} size={17} color={k.fg} />
+              <span className="kpi__label">{k.label}</span>
+            </div>
+            <div className="kpi__value mono" style={{ color: k.fg }}>
+              {k.value}
+            </div>
+            <div className="kpi__note">{k.note}</div>
+          </div>
         ))}
       </div>
 
-      <div
-        className="split"
-        style={{ gridTemplateColumns: 'minmax(0,1.62fr) minmax(0,1fr)' }}
-      >
+      <div className="split" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px', marginTop: 12 }}>
         <div className="stack">
+          {/* ── Требует внимания ─────────────────────────────────────── */}
           <section className="card card--clip">
             <div className="card__head">
               <div className="card__title">Требует внимания</div>
-              <span className="count-pill">{attention.length}</span>
-              <Segmented
-                options={ATTENTION_FILTERS}
-                value={attFilter}
-                onChange={setAttFilter}
-                style={{ marginLeft: 'auto' }}
-              />
-            </div>
-            {attention.map((a) => {
-              const t = findTask(a.key)
-              const r = ATTENTION_REASONS[a.kind]
-              return (
-                <div
-                  key={a.key}
-                  className="row"
-                  onClick={() => nav(`/tasks/${a.key}`)}
-                  style={{
-                    gridTemplateColumns: '3px 96px minmax(0,1fr) auto auto 24px',
-                    gap: 10,
-                    padding: '0 13px 0 0',
-                    height: 38,
-                  }}
-                >
-                  <span style={{ width: 3, height: 38, background: r.bar }} />
-                  <span style={{ marginLeft: 10 }}>
-                    <TaskKey>{t.key}</TaskKey>
-                  </span>
-                  <span className="ellipsis" style={{ fontSize: 12.5 }}>
-                    {t.title}
-                  </span>
-                  <span className="badge" style={{ background: r.bg, color: r.fg, height: 20 }}>
-                    <Icon name={r.icon} size={13} />
-                    {r.reason}
-                  </span>
-                  <span
-                    className="mono"
-                    style={{ fontSize: 11.5, color: 'var(--tx3)', whiteSpace: 'nowrap' }}
+              <span className="count-pill">{data?.attention.length ?? 0}</span>
+              <div className="spacer home__tabs">
+                {ATTENTION_TABS.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    className={t.value === tab ? 'tag tag--outline tag--on' : 'tag tag--outline'}
+                    onClick={() => setTab(t.value)}
                   >
-                    {a.meta}
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {attention.length === 0 && (
+              <Empty
+                icon="task_alt"
+                title="Всё под контролем"
+                text="Нет просрочек, блокировок и задач без исполнителя по выбранному фильтру."
+              />
+            )}
+
+            {attention.map((row) => {
+              const reason = reasons?.[row.kind]
+              const task = row.task
+              return (
+                <Link key={row.key} to={`/tasks/${row.key}`} className="att">
+                  <span className="att__thumb" style={{ background: reason?.bg, color: reason?.fg }}>
+                    <Icon name={reason?.icon ?? 'info'} size={16} />
                   </span>
-                  <Avatar id={t.who} />
-                </div>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <TaskKey>{row.key}</TaskKey>
+                      <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                        {task.title}
+                      </span>
+                    </span>
+                    <span className="att__meta" style={{ color: reason?.fg }}>
+                      {reason?.reason} · {row.meta}
+                    </span>
+                  </span>
+                  <Avatar id={task.who} size="md" />
+                  <span className="att__bar" style={{ background: reason?.bar }} />
+                </Link>
               )
             })}
           </section>
 
+          {/* ── Мои задачи ───────────────────────────────────────────── */}
           <section className="card card--clip">
             <div className="card__head">
               <div className="card__title">Мои задачи</div>
-              <Segmented options={MY_TABS} value={myTab} onChange={setMyTab} />
+              <span className="count-pill">{data?.myTasks.length ?? 0}</span>
               <button
                 type="button"
                 className="btn btn--link spacer"
-                onClick={() => nav('/tasks')}
+                onClick={() => nav('/tasks?assignee=' + (me?.code ?? ''))}
               >
-                Показать все задачи
-                <Icon name="arrow_forward" size={15} />
+                Все мои задачи
               </button>
             </div>
-            {myTasks.length === 0 && (
-              <div style={{ padding: '18px 13px', fontSize: 12.5, color: 'var(--tx3)' }}>
-                В этой группе задач нет.
-              </div>
+
+            {(data?.myTasks.length ?? 0) === 0 && (
+              <Empty icon="assignment_turned_in" title="Пусто" text="На вас сейчас нет открытых задач." />
             )}
-            {myTasks.map((t) => (
+
+            {(data?.myTasks ?? []).slice(0, 8).map((t) => (
               <div
                 key={t.key}
                 className="row"
+                style={{ gridTemplateColumns: '92px minmax(0,1fr) 118px 30px 68px', gap: 8 }}
                 onClick={() => nav(`/tasks/${t.key}`)}
-                style={{ gridTemplateColumns: '96px minmax(0,1fr) 19px 118px 62px' }}
               >
                 <TaskKey>{t.key}</TaskKey>
                 <span className="ellipsis" style={{ fontSize: 12.5 }}>
                   {t.title}
                 </span>
-                <PriorityChip priority={t.priority} />
-                <StatusBadge status={statusOf(t.key)} />
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 11.5,
-                    color: dueColor(t.dueState),
-                    textAlign: 'right',
-                  }}
-                >
+                <StatusBadge status={t.status} category={t.statusCategory} small />
+                <PriorityChip priority={t.priority} small />
+                <span className="mono" style={{ fontSize: 11.5, color: dueColor(t.dueState), textAlign: 'right' }}>
                   {t.due}
                 </span>
               </div>
             ))}
           </section>
 
-          <section>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
-              <div className="card__title">Активные проекты</div>
-              <button
-                type="button"
-                className="btn btn--link spacer"
-                onClick={() => nav('/projects')}
-              >
-                Все проекты
-              </button>
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
-                gap: 10,
-              }}
+          {/* ── Проекты ──────────────────────────────────────────────── */}
+          <section className="card card--pad">
+            <SectionTitle
+              right={
+                <button type="button" className="btn btn--link" onClick={() => nav('/projects')}>
+                  Все проекты
+                </button>
+              }
             >
-              {PROJECTS.slice(0, 3).map((p) => (
-                <div
-                  key={p.name}
-                  className="card card--hover"
-                  style={{ padding: '11px 12px' }}
-                  onClick={() => nav(`/projects/${encodeURIComponent(p.name)}`)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 6,
-                        background: p.bg,
-                        color: p.fg,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                        flex: 'none',
-                      }}
-                    >
-                      {p.abbr}
-                    </div>
-                    <div
-                      className="ellipsis"
-                      style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}
-                    >
+              Активные проекты
+            </SectionTitle>
+
+            <div className="home__projects">
+              {(data?.projects ?? []).map((p) => (
+                <Link key={p.id} to={`/projects/${encodeURIComponent(p.name)}`} className="home__project">
+                  <span className="project__mark" style={{ background: p.bg, color: p.fg }}>
+                    {p.abbr}
+                  </span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span className="ellipsis" style={{ display: 'block', fontSize: 12.5, fontWeight: 500 }}>
                       {p.name}
-                    </div>
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--tx2)' }}>
-                      {p.pct}
                     </span>
-                  </div>
-                  <Progress
-                    pct={p.pct}
-                    color={p.fg}
-                    variant="thin"
-                    style={{ marginTop: 9 }}
-                  />
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      marginTop: 9,
-                      fontSize: 11,
-                      color: 'var(--tx2)',
-                    }}
-                  >
-                    <Icon name="flag" size={14} color="var(--tx3)" />
-                    <span className="ellipsis">{p.milestone}</span>
-                    <span
-                      className="mono spacer"
-                      style={{ color: p.atRisk ? 'var(--dang)' : 'var(--tx2)' }}
-                    >
-                      {p.due}
-                    </span>
-                  </div>
-                  {p.atRisk && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        marginTop: 8,
-                        padding: '5px 7px',
-                        background: 'var(--dang-bg)',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        color: 'var(--dang)',
-                      }}
-                    >
-                      <Icon name="block" size={14} />1 задача blocked
-                    </div>
-                  )}
-                </div>
+                    <Progress pct={p.pct} color={p.fg} variant="thin" style={{ marginTop: 6 }} />
+                  </span>
+                  <span className="mono" style={{ fontSize: 11.5, color: p.atRisk ? 'var(--dang)' : 'var(--tx2)' }}>
+                    {p.pct}
+                  </span>
+                </Link>
               ))}
             </div>
           </section>
         </div>
 
-        <div className="stack">
-          <section className="card card--pad" style={{ padding: '12px 13px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="card__title">Sprint 24</div>
-              <span
-                className="badge badge--sm"
-                style={{ background: 'var(--ac-soft)', color: 'var(--ac-tx)' }}
-              >
-                активен
-              </span>
-              <span className="mono spacer" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-                осталось 4 дня
-              </span>
-            </div>
-            <div className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 4 }}>
-              12 – 25 августа
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 11 }}>
-              <span className="mono" style={{ fontSize: 20, fontWeight: 600 }}>
-                12/34
-              </span>
-              <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
-                задач выполнено · 34/52 SP
-              </span>
-            </div>
-            <div
-              className="bar"
-              style={{ marginTop: 8, display: 'flex', height: 6 }}
-              aria-label="Прогресс спринта"
-            >
-              <div className="bar__fill" style={{ width: '35%', background: 'var(--ok)' }} />
-              <div className="bar__fill" style={{ width: '24%', background: 'var(--ac)' }} />
-              <div className="bar__fill" style={{ width: '15%', background: 'var(--warn)' }} />
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 9 }}>
-              {SPRINT_BARS.map((sb) => (
-                <div
-                  key={sb.label}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    fontSize: 11,
-                    color: 'var(--tx2)',
-                  }}
-                >
-                  <span
-                    style={{ width: 7, height: 7, borderRadius: 2, background: sb.c }}
-                  />
-                  {sb.label} {sb.n}
-                </div>
-              ))}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 11,
-                paddingTop: 10,
-                borderTop: '1px solid var(--border)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11.5,
-                  color: 'var(--dang)',
-                }}
-              >
-                <Icon name="block" size={15} />1 blocked
+        {/* ── Правая колонка ─────────────────────────────────────────── */}
+        <aside className="stack sticky-aside">
+          {data?.sprint && (
+            <section className="card card--pad">
+              <SectionTitle>Спринт</SectionTitle>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{data.sprint.name}</span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
+                  {data.sprint.range}
+                </span>
               </div>
+              {data.sprint.goal && (
+                <p className="pretty" style={{ fontSize: 12, color: 'var(--tx2)', margin: '6px 0 0' }}>
+                  {data.sprint.goal}
+                </p>
+              )}
+              <div className="home__sprint">
+                <div>
+                  <b className="mono">{data.sprint.donePoints}</b>
+                  <span>из {data.sprint.points} SP</span>
+                </div>
+                <div>
+                  <b className="mono">{data.sprint.tasks}</b>
+                  <span>задач</span>
+                </div>
+                <div>
+                  <b className="mono">{data.sprint.daysLeft}</b>
+                  <span>дней</span>
+                </div>
+              </div>
+              <Progress
+                pct={`${data.sprint.points ? Math.round((data.sprint.donePoints / data.sprint.points) * 100) : 0}%`}
+                color="var(--ok)"
+                style={{ marginTop: 10 }}
+              />
               <button
                 type="button"
-                className="btn btn--link spacer"
+                className="btn btn--secondary"
+                style={{ width: '100%', marginTop: 10, justifyContent: 'center' }}
                 onClick={() => nav('/backlog')}
               >
-                Открыть спринт
-                <Icon name="arrow_forward" size={15} />
+                Планирование
               </button>
+            </section>
+          )}
+
+          <section className="card card--clip">
+            <div className="card__head">
+              <div className="card__title">Упоминания и ревью</div>
             </div>
+            {(data?.mentions.length ?? 0) === 0 && <div className="home__none">Пока ничего</div>}
+            {(data?.mentions ?? []).map((m) => (
+              <Link key={m.id} to={m.key ? `/tasks/${m.key}` : '/'} className="home__mention">
+                <Avatar id={m.who} size="md" />
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span className="home__mention-head">
+                    <Icon name={m.icon} size={14} color={m.icFg} />
+                    <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{m.kind}</span>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
+                      {m.key} · {m.time}
+                    </span>
+                  </span>
+                  <span className="home__mention-text">{m.text}</span>
+                </span>
+                {m.unread && <span className="dot-badge" style={{ position: 'static' }} />}
+              </Link>
+            ))}
           </section>
 
           <section className="card card--clip">
             <div className="card__head">
-              <div className="card__title">Упоминания и обновления</div>
-              <span className="spacer" style={{ fontSize: 11, color: 'var(--tx3)' }}>
-                {MENTIONS.filter((m) => m.unread).length} новых
-              </span>
+              <div className="card__title">Активность</div>
             </div>
-            {MENTIONS.map((m) => {
-              const p = PEOPLE[m.who]
-              return (
-                <div
-                  key={m.key + m.time}
-                  className="row row--static"
-                  onClick={() => nav(`/tasks/${m.key}`)}
-                  style={{
-                    gridTemplateColumns: '24px minmax(0,1fr)',
-                    height: 'auto',
-                    padding: '9px 13px',
-                    cursor: 'pointer',
-                    background: m.unread ? 'var(--ac-soft)' : 'transparent',
-                  }}
-                >
-                  <span className="av av--md" style={{ background: p.bg, color: p.fg }}>
-                    {p.who}
+            <div className="tl" style={{ padding: '10px 13px 13px' }}>
+              {(data?.activity ?? []).map((a) => (
+                <div key={a.id} className="tl__rail">
+                  <span className="tl__dot" style={{ background: a.bg, color: a.fg }}>
+                    <Icon name={a.icon} size={13} />
                   </span>
+                  <span className="tl__line" />
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Icon name={m.icon} size={14} color={m.icFg} />
-                      <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{m.kind}</span>
-                      <TaskKey>{m.key}</TaskKey>
-                      <span
-                        className="mono spacer"
-                        style={{ fontSize: 10.5, color: 'var(--tx3)' }}
-                      >
-                        {m.time}
-                      </span>
+                    <span style={{ fontSize: 12 }}>
+                      <b style={{ fontWeight: 600 }}>{a.who}</b> {a.what}
                     </span>
-                    <span
-                      className="pretty"
-                      style={{
-                        display: 'block',
-                        fontSize: 12,
-                        color: 'var(--tx2)',
-                        marginTop: 3,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {m.text}
+                    <span className="tl__meta">
+                      <Link to={`/tasks/${a.key}`} className="mono">
+                        {a.key}
+                      </Link>
+                      <span> · {a.time}</span>
                     </span>
                   </span>
-                </div>
-              )
-            })}
-          </section>
-
-          <section className="card card--pad" style={{ padding: '12px 13px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-              <div className="card__title">Недавняя активность</div>
-              <span className="spacer" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
-                сегодня
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {ACTIVITY.map((a, i) => (
-                <div key={a.key + i} className="tl" style={{ gridTemplateColumns: '20px minmax(0,1fr)' }}>
-                  <div className="tl__rail">
-                    <div
-                      className="tl__dot"
-                      style={{ width: 20, height: 20, background: a.bg, color: a.fg }}
-                    >
-                      <Icon name={a.icon} size={13} />
-                    </div>
-                    {i < ACTIVITY.length - 1 && <div className="tl__line" />}
-                  </div>
-                  <div style={{ paddingTop: 1 }}>
-                    <div className="pretty" style={{ fontSize: 12, color: 'var(--tx2)' }}>
-                      <span style={{ color: 'var(--tx)', fontWeight: 500 }}>{a.who}</span>{' '}
-                      {a.what}
-                    </div>
-                    <div className="tl__meta">
-                      {a.key} · {a.time}
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
           </section>
-        </div>
+        </aside>
       </div>
     </div>
   )

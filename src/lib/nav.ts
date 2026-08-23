@@ -2,16 +2,17 @@ export interface NavItem {
   to: string
   label: string
   icon: string
-  count?: number
-  /** Additional path prefixes that should keep this item highlighted. */
+  /** Ключ счётчика: подставляется из живых данных в Sidebar. */
+  count?: 'tasks' | 'queues' | 'projects'
+  /** Дополнительные префиксы пути, при которых пункт остаётся активным. */
   also?: string[]
 }
 
 export const NAV_MAIN: NavItem[] = [
   { to: '/', label: 'Главная', icon: 'home' },
-  { to: '/tasks', label: 'Задачи', icon: 'checklist', count: 128 },
-  { to: '/queues', label: 'Очереди', icon: 'layers', count: 6 },
-  { to: '/projects', label: 'Проекты', icon: 'folder_open', count: 6 },
+  { to: '/tasks', label: 'Задачи', icon: 'checklist', count: 'tasks' },
+  { to: '/queues', label: 'Очереди', icon: 'layers', count: 'queues' },
+  { to: '/projects', label: 'Проекты', icon: 'folder_open', count: 'projects' },
   { to: '/board', label: 'Доски', icon: 'view_kanban' },
   { to: '/backlog', label: 'Спринты', icon: 'rotate_right' },
 ]
@@ -23,7 +24,7 @@ export const NAV_ADMIN: NavItem[] = [
   { to: '/workflow', label: 'Настройки', icon: 'settings' },
 ]
 
-/** Breadcrumb trail per route, rendered after the workspace name. */
+/** Хлебные крошки по маршруту, показываются после названия организации. */
 export const CRUMBS: Record<string, string> = {
   '/': 'Главная',
   '/tasks': 'Задачи',
@@ -34,18 +35,12 @@ export const CRUMBS: Record<string, string> = {
   '/filters': 'Расширенный поиск',
   '/reports': 'Отчёты',
   '/teams': 'Команды',
-  '/workflow': 'Настройки очереди',
+  '/workflow': 'Настройки',
 }
-
-export const CREATE_ITEMS = [
-  { label: 'Задача', icon: 'add_task', kb: 'C' },
-  { label: 'Проект', icon: 'folder_open', kb: 'P' },
-  { label: 'Очередь', icon: 'layers', kb: 'Q' },
-  { label: 'Правило автоматизации', icon: 'bolt', kb: 'A' },
-]
 
 export const SEARCH_NAV = [
   { label: 'Открыть доску команды', icon: 'view_kanban', kb: 'B', to: '/board' },
   { label: 'Планирование спринта', icon: 'rotate_right', kb: 'S', to: '/backlog' },
   { label: 'Настройки воркфлоу', icon: 'account_tree', kb: 'W', to: '/workflow' },
+  { label: 'Отчёты и метрики', icon: 'monitoring', kb: 'R', to: '/reports' },
 ]
