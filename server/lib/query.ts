@@ -280,7 +280,11 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
       return wrap({ status: { category: { in: values.map((v) => v.toLowerCase()) } } })
 
     case 'priority': {
-      const keys = values.map((v) => PRIORITY_FROM_LABEL[v] ?? v.toLowerCase())
+      // hasOwn обязателен: без него `priority = constructor` вытащит
+      // функцию из прототипа и уронит запрос Prisma в 500.
+      const keys = values.map((v) =>
+        Object.hasOwn(PRIORITY_FROM_LABEL, v) ? PRIORITY_FROM_LABEL[v] : v.toLowerCase(),
+      )
       return wrap({ priority: { in: keys } })
     }
 
@@ -335,8 +339,16 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
       const date = resolveDate(first, now)
       if (!date) throw new QueryError(`«${first}» — не дата`)
       const key = field === 'created' ? 'createdAt' : 'updatedAt'
-      if (op === '<' || op === '<=') return { [key]: { lte: date } } as Where
-      return { [key]: { gte: date } } as Where
+
+      if (op === '<') return { [key]: { lt: date } } as Where
+      if (op === '<=') return { [key]: { lte: date } } as Where
+      if (op === '>') return { [key]: { gt: date } } as Where
+      if (op === '>=') return { [key]: { gte: date } } as Where
+
+      // Равенство по дате — это весь день, а не мгновение.
+      const dayEnd = new Date(startOfDay(date))
+      dayEnd.setHours(23, 59, 59, 999)
+      return wrap({ [key]: { gte: startOfDay(date), lte: dayEnd } } as Where)
     }
 
     case 'text':
@@ -349,8 +361,28 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
     case 'key':
       return wrap({ key: { in: values.map((v) => v.toUpperCase()) } })
 
-    case 'overdue':
-      return { dueDate: { lt: startOfDay(now) }, status: { category: { not: 'done' } } }
+    case 'overdue': {
+      const today = startOfDay(now)
+      const isOverdue: Where = {
+        dueDate: { lt: today },
+        status: { category: { not: 'done' } },
+      }
+      /*
+       * Противоположность выписана явно, а не через NOT: в SQL сравнение
+       * с NULL даёт неопределённость, и задачи без дедлайна выпали бы
+       * и из «просроченных», и из «не просроченных».
+       */
+      const notOverdue: Where = {
+        OR: [
+          { dueDate: null },
+          { dueDate: { gte: today } },
+          { status: { category: 'done' } },
+        ],
+      }
+      const wantTrue = String(first).toLowerCase() !== 'false'
+      const positive = negated ? !wantTrue : wantTrue
+      return positive ? isOverdue : notOverdue
+    }
 
     default:
       throw new QueryError(`Неизвестное поле «${field}»`)

@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js'
 import { authenticate } from '../lib/auth.js'
 import { emitChanges } from '../lib/events.js'
 import { parseQuery, QueryError, validateQuery } from '../lib/query.js'
+import { taskScope } from '../lib/access.js'
 
 export async function filterRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
@@ -28,7 +29,9 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
         let n = 0
         let error: string | null = null
         try {
-          n = await prisma.task.count({ where: parseQuery(f.query, ctx) })
+          n = await prisma.task.count({
+            where: { AND: [taskScope(req.user!), parseQuery(f.query, ctx)] },
+          })
         } catch (err) {
           error = err instanceof QueryError ? err.message : 'Ошибка запроса'
         }
@@ -131,7 +134,9 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
         userId: req.user!.id,
         userCode: req.user!.code,
       })
-      const n = await prisma.task.count({ where })
+      const n = await prisma.task.count({
+        where: { AND: [taskScope(req.user!), where] },
+      })
       return { ok: true, n }
     } catch (err) {
       return { ok: false, error: err instanceof QueryError ? err.message : 'Ошибка разбора' }

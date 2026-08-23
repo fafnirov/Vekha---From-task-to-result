@@ -8,6 +8,7 @@ import { personDto, queueDto } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
 import { AVATAR_PALETTE, QUEUE_ACCESS, ROLES } from '../lib/constants.js'
 import { initialsFrom } from '../lib/format.js'
+import { queueScope } from '../lib/access.js'
 
 const queueInclude = {
   owner: { select: { code: true } },
@@ -136,8 +137,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
   /* ── Очереди ──────────────────────────────────────────────────────── */
 
-  app.get('/api/queues', async () => {
+  app.get('/api/queues', async (req) => {
     const rows = await prisma.queue.findMany({
+      where: queueScope(req.user!),
       include: queueInclude,
       orderBy: { createdAt: 'asc' },
     })

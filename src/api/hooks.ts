@@ -120,10 +120,16 @@ export function useLiveUpdates(enabled: boolean): void {
 
 type Options<T> = Omit<UseQueryOptions<T, Error, T, readonly unknown[]>, 'queryKey' | 'queryFn'>
 
-export const useOrg = () => useQuery({ queryKey: keys.org, queryFn: () => api.get<Org>('/api/org') })
+/*
+ * Справочные запросы сессии принимают `enabled`: до входа они возвращали
+ * 401, ошибка оседала в кэше и после входа уже не повторялась — интерфейс
+ * оставался без справочника людей и без прав.
+ */
+export const useOrg = (enabled = true) =>
+  useQuery({ queryKey: keys.org, queryFn: () => api.get<Org>('/api/org'), enabled })
 
-export const usePeople = () =>
-  useQuery({ queryKey: keys.people, queryFn: () => api.get<Person[]>('/api/people') })
+export const usePeople = (enabled = true) =>
+  useQuery({ queryKey: keys.people, queryFn: () => api.get<Person[]>('/api/people'), enabled })
 
 export const useQueues = () =>
   useQuery({ queryKey: keys.queues, queryFn: () => api.get<Queue[]>('/api/queues') })
@@ -215,10 +221,11 @@ export const useWorkflows = () =>
 export const useFields = () =>
   useQuery({ queryKey: keys.fields, queryFn: () => api.get<TaskField[]>('/api/fields') })
 
-export const usePermissions = () =>
+export const usePermissions = (enabled = true) =>
   useQuery({
     queryKey: keys.permissions,
     queryFn: () => api.get<PermissionMatrix>('/api/permissions'),
+    enabled,
   })
 
 export const useRules = () =>
@@ -324,10 +331,18 @@ export const useUpdateTask = () =>
   )
 
 export const useMoveCard = () =>
-  useApiMutation<{ key: string; column: string; index: number | null }, { task: Task }>(
-    (body) => api.patch('/api/board/move', body),
-    ['board', 'tasks', 'sprints'],
-  )
+  useApiMutation<
+    {
+      key: string
+      column: string
+      index: number | null
+      /* Фильтры доски: сервер считает позицию по тому же набору карточек. */
+      queue?: string
+      sprint?: string
+      assignee?: string
+    },
+    { task: Task }
+  >((body) => api.patch('/api/board/move', body), ['board', 'tasks', 'sprints'])
 
 export const useAddComment = () =>
   useApiMutation<{ key: string; text: string }, Comment>(

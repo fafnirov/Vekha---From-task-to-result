@@ -54,9 +54,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useLiveUpdates(authorized)
 
-  const orgQuery = useOrg()
-  const peopleQuery = usePeople()
-  const permissionsQuery = usePermissions()
+  const orgQuery = useOrg(authorized)
+  const peopleQuery = usePeople(authorized)
+  const permissionsQuery = usePermissions(authorized)
 
   const people = useMemo(() => {
     const map: Record<string, Person> = {}
@@ -81,8 +81,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     qc.clear()
   }, [qc])
 
+  /*
+   * После входа перезапрашиваем всё: до него часть запросов отвечала 401,
+   * и без сброса интерфейс остался бы без прав и справочников.
+   */
   const refresh = useCallback(() => {
-    void qc.invalidateQueries({ queryKey: keys.me })
+    void qc.invalidateQueries()
   }, [qc])
 
   const value = useMemo<SessionApi>(

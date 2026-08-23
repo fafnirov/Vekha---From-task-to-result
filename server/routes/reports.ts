@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js'
 import { authenticate } from '../lib/auth.js'
 import { personDto } from '../lib/dto.js'
 import { daysBetween, overdueLabel, pct, plural, startOfDay } from '../lib/format.js'
+import { taskScope } from '../lib/access.js'
 
 /** Понедельник недели, в которую попадает дата. */
 function weekStart(d: Date): Date {
@@ -30,7 +31,10 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       .object({ weeks: z.coerce.number().int().min(4).max(26).default(8), queue: z.string().optional() })
       .parse(req.query)
 
-    const queueFilter = p.queue ? { queue: { key: p.queue } } : {}
+    const queueFilter = {
+      ...taskScope(req.user!),
+      ...(p.queue ? { queue: { key: p.queue } } : {}),
+    }
     const now = new Date()
     const today = startOfDay(now)
 

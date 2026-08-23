@@ -62,12 +62,18 @@ export function TaskDetail() {
 
   const task = detail.data?.task
 
+  /*
+   * Черновики подтягиваются из задачи, но не поверх открытой формы:
+   * иначе правка коллеги, прилетевшая по SSE, стёрла бы недописанный
+   * пользователем текст.
+   */
   useEffect(() => {
-    if (task) {
-      setDraft(task.description)
-      setTitleDraft(task.title)
-    }
-  }, [task?.id, task?.description, task?.title])
+    if (task && !editingDescription) setDraft(task.description)
+  }, [task?.id, task?.description, editingDescription])
+
+  useEffect(() => {
+    if (task && !editingTitle) setTitleDraft(task.title)
+  }, [task?.id, task?.title, editingTitle])
 
   const watch = useApiMutation<void, { watching: boolean }>(
     () => api.post(`/api/tasks/${encodeURIComponent(key)}/watch`),

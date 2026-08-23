@@ -17,6 +17,7 @@ import { runRules } from '../lib/automation.js'
 import { parseQuery, QueryError } from '../lib/query.js'
 import { PRIORITIES, PRIORITY_LABEL, LINK_TYPES, type Priority } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
+import { taskScope, canSeeQueue } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
 const SORTABLE: Record<string, (dir: 'asc' | 'desc') => Prisma.TaskOrderByWithRelationInput> = {
@@ -120,7 +121,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'Некорректные параметры' })
     const p = parsed.data
 
-    const filters: Prisma.TaskWhereInput[] = []
+    // Закрытые и ограниченные очереди не должны попадать в выдачу.
+    const filters: Prisma.TaskWhereInput[] = [taskScope(req.user!)]
 
     if (p.q) {
       try {
@@ -161,7 +163,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const where: Prisma.TaskWhereInput = filters.length ? { AND: filters } : {}
-    const orderFn = SORTABLE[p.sort] ?? SORTABLE.key
+    // hasOwn, а не ??: `sort=constructor` иначе достанет функцию из
+    // прототипа и запрос упадёт с 500.
+    const orderFn = Object.hasOwn(SORTABLE, p.sort) ? SORTABLE[p.sort] : SORTABLE.key
 
     const [total, rows] = await Promise.all([
       prisma.task.count({ where }),
@@ -192,6 +196,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       where: { key: key.toUpperCase() },
       include: {
         ...taskInclude,
+        queue: { select: { key: true, access: true, ownerId: true } },
         subtasks: { include: taskInclude, orderBy: { num: 'asc' } },
         watchers: { include: { user: { select: { id: true, code: true, name: true } } } },
         linksOut: { include: { to: { include: taskInclude } } },
@@ -203,6 +208,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+    // Ответ «не найдена», а не «нет доступа»: иначе по коду ответа можно
+    // проверять существование задач в закрытой очереди.
+    if (!canSeeQueue(req.user!, task.queue)) {
+      return reply.code(404).send({ error: 'Задача не найдена' })
+    }
 
     const now = new Date()
     const availableTransitions = await prisma.transition.findMany({
@@ -375,9 +385,24 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+    if (!canSeeQueue(req.user!, task.queue)) {
+      return reply.code(404).send({ error: 'Задача не найдена' })
+    }
 
     if (!(await canEditTask(req.user!, task))) {
       return reply.code(403).send({ error: 'Можно править только свои задачи' })
+    }
+
+    /*
+     * Права проверяются здесь, до любых изменений. Иначе отказ в середине
+     * обработки оставлял бы следы: назначенный исполнитель уже получил бы
+     * уведомление и подписку, а сама правка не применилась.
+     */
+    if (body.status !== undefined && body.status !== task.status.name) {
+      if (!(await requirePerm(req, reply, 'task.status'))) return
+    }
+    if (body.sprint !== undefined) {
+      if (!(await requirePerm(req, reply, 'sprint.manage'))) return
     }
 
     const data: Prisma.TaskUpdateInput = {}
@@ -386,8 +411,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
     /* Статус — единственное изменение с проверкой воркфлоу. */
     if (body.status && body.status !== task.status.name) {
-      if (!(await requirePerm(req, reply, 'task.status'))) return
-
       const next = await prisma.status.findFirst({
         where: { workflowId: task.queue.workflowId, name: body.status },
       })
@@ -485,7 +508,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (body.sprint !== undefined) {
-      if (!(await requirePerm(req, reply, 'sprint.manage'))) return
       const sprint = body.sprint
         ? await prisma.sprint.findFirst({
             where: { OR: [{ id: body.sprint }, { name: body.sprint, queueId: task.queueId }] },
@@ -577,8 +599,14 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/api/tasks/:key', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'task.delete'))) return
     const { key } = req.params as { key: string }
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findUnique({
+      where: { key: key.toUpperCase() },
+      include: { queue: { select: { access: true, ownerId: true } } },
+    })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+    if (!canSeeQueue(req.user!, task.queue)) {
+      return reply.code(404).send({ error: 'Задача не найдена' })
+    }
     await prisma.task.delete({ where: { id: task.id } })
     emitChanges(['tasks', 'board', 'queues', 'projects'])
     return { ok: true }
@@ -587,14 +615,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   /** Массовые действия таблицы: статус, исполнитель, приоритет, спринт. */
   app.post('/api/tasks/bulk', async (req, reply) => {
     const schema = z.object({
-      keys: z.array(z.string()).min(1),
+      // Ограничение сверху: иначе один запрос выльется в тысячи правок
+      // с автоматизациями и уведомлениями внутри.
+      keys: z.array(z.string()).min(1).max(200),
       status: z.string().optional(),
       priority: z.enum(PRIORITIES).optional(),
       assignee: z.string().nullable().optional(),
       sprint: z.string().nullable().optional(),
     })
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: 'Некорректные данные: не больше 200 задач за раз' })
+    }
 
     let applied = 0
     const failed: { key: string; reason: string }[] = []
@@ -602,7 +636,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     for (const key of parsed.data.keys) {
       const res = await app.inject({
         method: 'PATCH',
-        url: `/api/tasks/${encodeURIComponent(key)}`,
+        // Префикс обязателен: маршруты зарегистрированы под BASE_PATH,
+        // и без него inject уходит в обработчик «не найдено».
+        url: `${BASE_PATH}/api/tasks/${encodeURIComponent(key)}`,
         headers: { cookie: req.headers.cookie ?? '' },
         payload: {
           status: parsed.data.status,
@@ -613,8 +649,14 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       })
       if (res.statusCode < 300) applied += 1
       else {
-        const body = res.json<{ error?: string }>()
-        failed.push({ key, reason: body.error ?? 'Не удалось изменить' })
+        // Ответ без JSON-тела не должен ронять весь массовый запрос.
+        let reason = 'Не удалось изменить'
+        try {
+          reason = res.json<{ error?: string }>().error ?? reason
+        } catch {
+          reason = `Ошибка ${res.statusCode}`
+        }
+        failed.push({ key, reason })
       }
     }
 

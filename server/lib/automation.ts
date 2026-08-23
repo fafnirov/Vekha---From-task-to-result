@@ -14,7 +14,7 @@
 import { prisma } from './prisma.js'
 import { notify, record, taskAudience } from './activity.js'
 import { emitChanges } from './events.js'
-import { PRIORITY_LABEL, PRIORITY_ORDER, type Priority } from './constants.js'
+import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Priority } from './constants.js'
 import { startOfDay } from './format.js'
 
 export type Trigger = 'task_created' | 'status_changed' | 'task_closed' | 'schedule'
@@ -181,7 +181,12 @@ async function runAction(ruleName: string, taskId: string, action: Action): Prom
   switch (action.type) {
     case 'set_priority':
     case 'raise_priority': {
-      const value = (action.value ?? 'high') as Priority
+      const raw = action.value ?? 'high'
+      if (!(PRIORITIES as readonly string[]).includes(raw)) {
+        console.warn(`Правило «${ruleName}»: неизвестный приоритет «${raw}»`)
+        return false
+      }
+      const value = raw as Priority
       const current = await prisma.task.findUnique({
         where: { id: taskId },
         select: { priority: true },
@@ -220,11 +225,25 @@ async function runAction(ruleName: string, taskId: string, action: Action): Prom
         where: { workflowId: task.queue.workflowId, name: action.value },
       })
       if (!next) return false
+
+      // Автоматизация подчиняется тому же воркфлоу, что и человек: иначе
+      // задача попадёт в статус, из которого её потом никто не вытащит.
+      const allowed = await prisma.transition.findUnique({
+        where: { fromId_toId: { fromId: task.statusId, toId: next.id } },
+      })
+      if (!allowed) {
+        console.warn(
+          `Правило «${ruleName}»: переход ${task.status.name} → ${next.name} не разрешён воркфлоу`,
+        )
+        return false
+      }
+
       await prisma.task.update({
         where: { id: taskId },
         data: {
           statusId: next.id,
-          closedAt: next.category === 'done' ? new Date() : null,
+          // Уже закрытой задаче дату закрытия не переписываем.
+          closedAt: next.category === 'done' ? (task.closedAt ?? new Date()) : null,
         },
       })
       await record({
@@ -359,10 +378,12 @@ export async function runRules(trigger: Trigger, taskId: string): Promise<void> 
       trigger,
       OR: [{ queueId: task.queueId }, { queueId: null }],
     },
+    // Без явного порядка исход зависел бы от того, как СУБД вернёт строки.
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   })
   if (rules.length === 0) return
 
-  const facts = await factsOf(taskId)
+  let facts = await factsOf(taskId)
   if (!facts) return
 
   let touched = false
@@ -381,6 +402,9 @@ export async function runRules(trigger: Trigger, taskId: string): Promise<void> 
           where: { id: rule.id },
           data: { runCount: { increment: 1 }, lastRunAt: new Date() },
         })
+        // Следующее правило должно видеть уже изменённую задачу, иначе
+        // два правила сработают на одном и том же «старом» статусе.
+        facts = (await factsOf(taskId)) ?? facts
       }
     } catch (err) {
       console.error(`Автоматизация «${rule.name}» завершилась ошибкой:`, err)
@@ -397,6 +421,7 @@ export async function runRules(trigger: Trigger, taskId: string): Promise<void> 
 export async function runScheduledRules(): Promise<number> {
   const rules = await prisma.automationRule.findMany({
     where: { enabled: true, trigger: 'schedule' },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   })
   if (rules.length === 0) return 0
 
@@ -407,7 +432,7 @@ export async function runScheduledRules(): Promise<number> {
 
   let fired = 0
   for (const task of open) {
-    const facts = await factsOf(task.id)
+    let facts = await factsOf(task.id)
     if (!facts) continue
 
     for (const rule of rules) {
@@ -425,6 +450,7 @@ export async function runScheduledRules(): Promise<number> {
             where: { id: rule.id },
             data: { runCount: { increment: 1 }, lastRunAt: new Date() },
           })
+          facts = (await factsOf(task.id)) ?? facts
         }
       } catch (err) {
         console.error(`Автоматизация «${rule.name}» завершилась ошибкой:`, err)

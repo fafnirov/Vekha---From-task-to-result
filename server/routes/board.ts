@@ -8,6 +8,7 @@ import { taskDto, taskInclude } from '../lib/dto.js'
 import { record, notify, taskAudience } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
 import { runRules } from '../lib/automation.js'
+import { canSeeQueue, taskScope } from '../lib/access.js'
 
 function parseStatuses(raw: string): string[] {
   try {
@@ -41,6 +42,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
     const columns = await prisma.boardColumn.findMany({ orderBy: { order: 'asc' } })
     const tasks = await prisma.task.findMany({
       where: {
+        ...taskScope(req.user!),
         ...(p.queue ? { queue: { key: { in: p.queue.split(',') } } } : {}),
         ...(p.sprint ? { sprint: { name: p.sprint } } : {}),
         ...(p.assignee ? { assignee: { code: { in: p.assignee.split(',') } } } : {}),
@@ -90,15 +92,30 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       key: z.string(),
       column: z.string(),
       index: z.number().int().min(0).nullable().default(null),
+      /*
+       * Фильтры доски приходят вместе с переносом: позицию нужно считать
+       * по тому же набору карточек, который видит пользователь, иначе
+       * индекс из отфильтрованного списка применится к полному.
+       */
+      queue: z.string().optional(),
+      sprint: z.string().optional(),
+      assignee: z.string().optional(),
+      doneDays: z.coerce.number().int().min(1).max(365).default(14),
     })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
 
     const task = await prisma.task.findUnique({
       where: { key: parsed.data.key.toUpperCase() },
-      include: { status: true, queue: { select: { workflowId: true } } },
+      include: {
+        status: true,
+        queue: { select: { workflowId: true, access: true, ownerId: true } },
+      },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+    if (!canSeeQueue(req.user!, task.queue)) {
+      return reply.code(404).send({ error: 'Задача не найдена' })
+    }
 
     const column = await prisma.boardColumn.findUnique({ where: { name: parsed.data.column } })
     if (!column) return reply.code(404).send({ error: 'Колонка не найдена' })
@@ -135,25 +152,63 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       nextCategory = target.category
     }
 
-    /* Позиция внутри колонки: ранг ставится между соседями. */
-    const siblings = await prisma.task.findMany({
+    /* ── Позиция внутри колонки ──────────────────────────────────── */
+
+    const moveSince = new Date()
+    moveSince.setDate(moveSince.getDate() - parsed.data.doneDays)
+
+    // Те же условия и тот же порядок, что и в GET /api/board.
+    const column_ = await prisma.task.findMany({
       where: {
         status: { name: { in: columnStatuses } },
-        id: { not: task.id },
+        ...(parsed.data.queue ? { queue: { key: { in: parsed.data.queue.split(',') } } } : {}),
+        ...(parsed.data.sprint ? { sprint: { name: parsed.data.sprint } } : {}),
+        ...(parsed.data.assignee
+          ? { assignee: { code: { in: parsed.data.assignee.split(',') } } }
+          : {}),
+        OR: [{ status: { category: { not: 'done' } } }, { closedAt: { gte: moveSince } }],
       },
-      orderBy: { rank: 'asc' },
+      orderBy: [{ rank: 'asc' }, { num: 'desc' }],
       select: { id: true, rank: true },
     })
 
-    const at = parsed.data.index === null ? siblings.length : Math.min(parsed.data.index, siblings.length)
-    const before = at > 0 ? siblings[at - 1]?.rank : undefined
-    const after = siblings[at]?.rank
+    // Карточку исключаем уже после сортировки: индекс с клиента считался
+    // по списку, в котором она ещё была, иначе перенос вниз в своей же
+    // колонке промахивается на одну позицию.
+    const others = column_.filter((t) => t.id !== task.id)
+
+    const at =
+      parsed.data.index === null
+        ? others.length
+        : Math.max(0, Math.min(parsed.data.index, others.length))
+    const before = at > 0 ? others[at - 1]?.rank : undefined
+    const after = others[at]?.rank
 
     let rank: number
     if (before === undefined && after === undefined) rank = 1000
     else if (before === undefined) rank = after! - 100
     else if (after === undefined) rank = before + 100
     else rank = (before + after) / 2
+
+    /*
+     * Промежутка между соседями может не остаться: у сидовых задач ранги
+     * совпадают, а деление пополам за полсотни переносов упирается в
+     * точность double. Тогда перенумеровываем колонку с шагом 1000 —
+     * без этого карточка молча возвращалась бы на место.
+     */
+    const tooTight =
+      before !== undefined && after !== undefined && Math.abs(after - before) < 1e-6
+
+    if (tooTight) {
+      const order = others.map((t) => t.id)
+      order.splice(at, 0, task.id)
+      await prisma.$transaction(
+        order.map((id, i) =>
+          prisma.task.update({ where: { id }, data: { rank: (i + 1) * 1000 } }),
+        ),
+      )
+      rank = (at + 1) * 1000
+    }
 
     await prisma.task.update({
       where: { id: task.id },

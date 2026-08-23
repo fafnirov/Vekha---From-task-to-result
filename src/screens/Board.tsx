@@ -65,7 +65,14 @@ export function Board() {
     endDrag()
 
     try {
-      await move.mutateAsync({ key, column: columnName, index })
+      await move.mutateAsync({
+        key,
+        column: columnName,
+        index,
+        queue: queue || undefined,
+        sprint: sprint || undefined,
+        assignee: assignee || undefined,
+      })
       toast('Задача перенесена', `${key} → ${columnName}`, columnName === 'Done' ? 'ok' : 'info')
     } catch (err) {
       // Воркфлоу может запретить переход — сообщаем причину и не двигаем карточку.

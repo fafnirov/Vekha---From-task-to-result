@@ -14,6 +14,7 @@ import {
 } from '../lib/dto.js'
 import { bus, type ChangeEvent } from '../lib/events.js'
 import { PROJECT_PALETTE } from '../lib/constants.js'
+import { taskScope } from '../lib/access.js'
 import { relativeTime, shortDate, startOfDay } from '../lib/format.js'
 
 const activityInclude = {
@@ -97,13 +98,13 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
 
       const [myTasks, allOpen, projects, activeSprint, activity, mentions] = await Promise.all([
         prisma.task.findMany({
-          where: { assigneeId: me.id, status: { category: { not: 'done' } } },
+          where: { assigneeId: me.id, status: { category: { not: 'done' } }, ...taskScope(me) },
           include: taskInclude,
           orderBy: [{ dueDate: 'asc' }, { priority: 'asc' }],
           take: 12,
         }),
         prisma.task.findMany({
-          where: { status: { category: { not: 'done' } } },
+          where: { status: { category: { not: 'done' } }, ...taskScope(me) },
           include: taskInclude,
         }),
         prisma.project.findMany({
@@ -311,6 +312,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
       const [tasks, projects, queues, people] = await Promise.all([
         prisma.task.findMany({
           where: {
+            ...taskScope(req.user!),
             OR: [
               { key: { contains: term.toUpperCase() } },
               { title: { contains: term } },
