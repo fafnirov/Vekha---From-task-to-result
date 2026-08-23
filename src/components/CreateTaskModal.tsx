@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar, Checkbox, Icon } from './ui'
+import { NoQueues } from './NoQueues'
 import { PRIORITY_KEY, PRIORITY_NAMES } from '../data/catalog'
 import {
   useCreateTask,
@@ -139,6 +140,9 @@ export function CreateTaskModal() {
           </button>
         </div>
 
+        {!queues.isLoading && (queues.data ?? []).length === 0 ? (
+          <NoQueues what="задачу" />
+        ) : (
         <div className="modal__body">
           <div className="grid-2">
             <label className="label">
@@ -314,6 +318,7 @@ export function CreateTaskModal() {
             </div>
           )}
         </div>
+        )}
 
         <div className="modal__foot">
           <button type="button" className="btn btn--quiet" style={{ padding: 0 }} onClick={() => setMore(!more)}>
@@ -326,14 +331,16 @@ export function CreateTaskModal() {
           <button type="button" className="btn btn--secondary btn--lg" onClick={ui.closeCreateModal}>
             Отмена
           </button>
-          <button
-            type="button"
-            className="btn btn--primary btn--lg"
-            onClick={() => void submit()}
-            disabled={create.isPending}
-          >
-            {create.isPending ? 'Создаём…' : 'Создать задачу'}
-          </button>
+          {(queues.data ?? []).length > 0 && (
+            <button
+              type="button"
+              className="btn btn--primary btn--lg"
+              onClick={() => void submit()}
+              disabled={create.isPending}
+            >
+              {create.isPending ? 'Создаём…' : 'Создать задачу'}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, Progress, Segmented } from '../components/ui'
+import { NoQueues } from '../components/NoQueues'
 import { api } from '../api/client'
 import { useApiMutation, useProjects, useQueues, useTasks } from '../api/hooks'
 import { useSession } from '../store/session'
@@ -64,7 +65,11 @@ export function Projects() {
         <Empty
           icon="folder_open"
           title="Проектов нет"
-          text="Проект собирает задачи из очереди вокруг общей цели, вех и сроков."
+          text={
+            (queues.data ?? []).length === 0
+              ? 'Сначала создайте очередь — проект собирает её задачи вокруг общей цели, вех и сроков.'
+              : 'Проект собирает задачи из очереди вокруг общей цели, вех и сроков.'
+          }
         />
       )}
 
@@ -189,6 +194,9 @@ function ProjectDialog({
           </button>
         </div>
 
+        {queues.length === 0 ? (
+          <NoQueues what="проект" />
+        ) : (
         <div className="modal__body">
           <label className="label">
             <span>Название</span>
@@ -266,11 +274,13 @@ function ProjectDialog({
             </label>
           </div>
         </div>
+        )}
 
         <div className="modal__foot">
           <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
             Отмена
           </button>
+          {queues.length > 0 && (
           <button
             type="button"
             className="btn btn--primary btn--lg"
@@ -289,6 +299,7 @@ function ProjectDialog({
           >
             Создать проект
           </button>
+          )}
         </div>
       </div>
     </div>
