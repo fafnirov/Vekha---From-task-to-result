@@ -1,25 +1,54 @@
 {
   "name": "vekha",
   "private": true,
-  "version": "2.4.0",
-  "description": "Vekha — from task to result. Task and project tracker interface.",
+  "version": "3.0.0",
+  "description": "Vekha — from task to result. Task and project tracker for product teams.",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n server,client -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite",
     "build": "tsc -b && vite build",
+    "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "seed": "tsx prisma/seed.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset",
+    "db:studio": "prisma studio",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json",
+    "test": "node --test --import tsx server/**/*.test.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/jwt": "^10.2.2",
+    "@fastify/multipart": "^10.1.1",
+    "@fastify/static": "^10.1.3",
+    "@prisma/client": "^6.19.3",
+    "@tanstack/react-query": "^5.102.1",
+    "bcryptjs": "^3.0.3",
+    "cross-env": "^10.1.0",
+    "fastify": "^5.12.1",
+    "nanoid": "^6.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^7.18.2",
+    "tsx": "^4.23.12",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^26.2.0",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.2",
+    "@vitejs/plugin-react": "^5.2.0",
+    "concurrently": "^10.0.5",
+    "prisma": "^6.19.3",
     "typescript": "^5.6.3",
-    "vite": "^5.4.9"
+    "vite": "^7.3.6"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   }
 }

@@ -12,3 +12,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Локальные данные и секреты
+.env
+prisma/dev.db
+prisma/dev.db-journal
+uploads/

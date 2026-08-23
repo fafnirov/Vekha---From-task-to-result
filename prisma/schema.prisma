@@ -1,0 +1,487 @@
+// Vekha — схема данных трекера.
+// SQLite для локального запуска; смена на PostgreSQL — это правка datasource
+// и `npx prisma migrate dev`. Перечислений нет намеренно: SQLite их не
+// поддерживает, поэтому роли, статусы и категории хранятся строками и
+// проверяются в server/lib/constants.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/* ── Организация и люди ───────────────────────────────────────────────── */
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  unit      String   @default("")
+  mark      String   @default("В")
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  /// Монограмма для аватара: две буквы.
+  initials     String
+  /// Короткий код, которым интерфейс ссылается на человека.
+  code         String    @unique
+  role         String    @default("member") // admin | manager | member | viewer
+  jobTitle     String    @default("")
+  avatarBg     String    @default("var(--n-bg)")
+  avatarFg     String    @default("var(--tx2)")
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastSeenAt   DateTime?
+
+  ownedQueues    Queue[]        @relation("QueueOwner")
+  ledProjects    Project[]      @relation("ProjectLead")
+  assignedTasks  Task[]         @relation("TaskAssignee")
+  authoredTasks  Task[]         @relation("TaskAuthor")
+  comments       Comment[]
+  attachments    Attachment[]
+  activities     Activity[]
+  watching       Watcher[]
+  teamLinks      TeamMember[]
+  notifications  Notification[] @relation("NotifyUser")
+  actedOn        Notification[] @relation("NotifyActor")
+  savedFilters   SavedFilter[]
+  invitesCreated Invite[]       @relation("InviteAuthor")
+  worklogs       Worklog[]
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  email       String
+  role        String    @default("member")
+  token       String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  createdById String
+
+  createdBy User @relation("InviteAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([email])
+}
+
+/* ── Воркфлоу ─────────────────────────────────────────────────────────── */
+
+model Workflow {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  statuses    Status[]
+  transitions Transition[]
+  queues      Queue[]
+}
+
+model Status {
+  id         String @id @default(cuid())
+  workflowId String
+  name       String
+  /// todo | inprogress | done | blocked — определяет цвет и попадание в отчёты.
+  category   String @default("todo")
+  order      Int    @default(0)
+
+  workflow Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tasks    Task[]
+  from     Transition[] @relation("TransitionFrom")
+  to       Transition[] @relation("TransitionTo")
+
+  @@unique([workflowId, name])
+}
+
+model Transition {
+  id         String @id @default(cuid())
+  workflowId String
+  fromId     String
+  toId       String
+  condition  String @default("")
+  /// Минимальная роль, которой разрешён переход.
+  role       String @default("member")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  from     Status   @relation("TransitionFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to       Status   @relation("TransitionTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId])
+}
+
+/* ── Очереди, проекты, спринты ────────────────────────────────────────── */
+
+model Queue {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  name       String
+  ownerId    String
+  workflowId String
+  /// team | company | restricted | private
+  access     String   @default("team")
+  /// Счётчик для генерации ключей вида VEKHA-142.
+  counter    Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  owner     User             @relation("QueueOwner", fields: [ownerId], references: [id])
+  workflow  Workflow         @relation(fields: [workflowId], references: [id])
+  tasks     Task[]
+  projects  Project[]
+  sprints   Sprint[]
+  rules     AutomationRule[]
+  templates TaskTemplate[]
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  abbr        String
+  description String    @default("")
+  queueId     String
+  leadId      String
+  /// active | risk | release | done | planned
+  state       String    @default("active")
+  startDate   DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+
+  queue      Queue       @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  lead       User        @relation("ProjectLead", fields: [leadId], references: [id])
+  tasks      Task[]
+  milestones Milestone[]
+}
+
+model Milestone {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  note      String   @default("")
+  date      DateTime
+  /// done | active | planned
+  state     String   @default("planned")
+  order     Int      @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Sprint {
+  id        String   @id @default(cuid())
+  name      String
+  queueId   String
+  goal      String   @default("")
+  startDate DateTime
+  endDate   DateTime
+  /// planned | active | closed
+  state     String   @default("planned")
+  /// Ёмкость команды в story points.
+  capacity  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  queue     Queue           @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  snapshots BurndownPoint[]
+
+  @@unique([queueId, name])
+}
+
+/// Ежедневный срез остатка story points — источник данных для burndown.
+model BurndownPoint {
+  id        String   @id @default(cuid())
+  sprintId  String
+  day       DateTime
+  remaining Int
+  ideal     Int
+
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, day])
+}
+
+/* ── Задачи ───────────────────────────────────────────────────────────── */
+
+model Task {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  num         Int
+  queueId     String
+  title       String
+  description String    @default("")
+  statusId    String
+  /// critical | high | medium | low
+  priority    String    @default("medium")
+  assigneeId  String?
+  authorId    String
+  projectId   String?
+  sprintId    String?
+  parentId    String?
+  dueDate     DateTime?
+  estimate    Int?
+  /// Позиция карточки внутри колонки доски и внутри бэклога.
+  rank        Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  closedAt    DateTime?
+
+  queue         Queue          @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  status        Status         @relation(fields: [statusId], references: [id])
+  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  author        User           @relation("TaskAuthor", fields: [authorId], references: [id])
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  sprint        Sprint?        @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  parent        Task?          @relation("Subtasks", fields: [parentId], references: [id], onDelete: SetNull)
+  subtasks      Task[]         @relation("Subtasks")
+  tags          TaskTag[]
+  comments      Comment[]
+  attachments   Attachment[]
+  activities    Activity[]
+  watchers      Watcher[]
+  linksOut      TaskLink[]     @relation("LinkFrom")
+  linksIn       TaskLink[]     @relation("LinkTo")
+  notifications Notification[]
+  worklogs      Worklog[]
+
+  @@index([queueId])
+  @@index([statusId])
+  @@index([assigneeId])
+  @@index([sprintId])
+  @@index([projectId])
+}
+
+model Tag {
+  id    String    @id @default(cuid())
+  name  String    @unique
+  tasks TaskTag[]
+}
+
+model TaskTag {
+  taskId String
+  tagId  String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+}
+
+model TaskLink {
+  id     String @id @default(cuid())
+  fromId String
+  toId   String
+  /// blocks | relates | duplicates | causes
+  type   String @default("relates")
+
+  from Task @relation("LinkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   Task @relation("LinkTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, type])
+}
+
+model Watcher {
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  editedAt  DateTime?
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  filename     String
+  storedName   String
+  mime         String
+  size         Int
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([taskId])
+}
+
+/// Списание времени: превращает оценки в фактические часы для отчётов.
+model Worklog {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  minutes   Int
+  note      String   @default("")
+  spentOn   DateTime
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+/// Запись в истории задачи. actorId пуст, если действие выполнила автоматизация.
+model Activity {
+  id        String   @id @default(cuid())
+  taskId    String
+  actorId   String?
+  /// created | status | priority | assignee | sprint | estimate | due | comment
+  /// | attachment | link | automation | title | description | project
+  kind      String
+  field     String   @default("")
+  fromValue String   @default("")
+  toValue   String   @default("")
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  actorId   String?
+  taskId    String?
+  /// mention | assigned | status | comment | link | review | watch
+  kind      String
+  text      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user  User  @relation("NotifyUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("NotifyActor", fields: [actorId], references: [id], onDelete: SetNull)
+  task  Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+/* ── Команды ──────────────────────────────────────────────────────────── */
+
+model Team {
+  id   String @id @default(cuid())
+  name String @unique
+  abbr String
+  note String @default("")
+  bg   String @default("var(--n-bg)")
+  fg   String @default("var(--tx2)")
+
+  members TeamMember[]
+}
+
+model TeamMember {
+  teamId String
+  userId String
+  role   String @default("member")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+}
+
+/* ── Настройки: поля, права, автоматизации, шаблоны, фильтры ──────────── */
+
+model TaskField {
+  id       String  @id @default(cuid())
+  key      String  @unique
+  label    String
+  type     String
+  icon     String  @default("label")
+  screen   String  @default("Все")
+  required Boolean @default(false)
+  onCard   Boolean @default(false)
+  system   Boolean @default(false)
+  order    Int     @default(0)
+}
+
+model RolePermission {
+  id      String  @id @default(cuid())
+  /// Код права: task.view, task.create, task.status, …
+  key     String
+  role    String
+  allowed Boolean @default(false)
+
+  @@unique([key, role])
+}
+
+model AutomationRule {
+  id        String    @id @default(cuid())
+  queueId   String?
+  name      String
+  /// status_changed | task_created | task_closed | schedule
+  trigger   String
+  /// JSON-условие, разбирается в server/lib/automation.ts
+  condition String    @default("{}")
+  /// JSON-действие
+  action    String    @default("{}")
+  icon      String    @default("bolt")
+  iconFg    String    @default("var(--ac)")
+  enabled   Boolean   @default(true)
+  runCount  Int       @default(0)
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+
+  queue Queue? @relation(fields: [queueId], references: [id], onDelete: Cascade)
+}
+
+model TaskTemplate {
+  id      String  @id @default(cuid())
+  queueId String?
+  name    String
+  icon    String  @default("description")
+  note    String  @default("")
+  /// JSON-массив тегов
+  tags    String  @default("[]")
+  body    String  @default("")
+
+  queue Queue? @relation(fields: [queueId], references: [id], onDelete: Cascade)
+}
+
+model SavedFilter {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  /// Строка на языке запросов: queue = VEKHA AND status = Review
+  query     String
+  icon      String   @default("filter_alt")
+  iconFg    String   @default("var(--ac)")
+  favorite  Boolean  @default(false)
+  shared    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
+/* ── Доска ────────────────────────────────────────────────────────────── */
+
+model BoardColumn {
+  id       String @id @default(cuid())
+  name     String @unique
+  /// JSON-массив имён статусов, которые попадают в эту колонку.
+  statuses String @default("[]")
+  wipLimit Int    @default(0)
+  order    Int    @default(0)
+}
