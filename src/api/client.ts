@@ -4,6 +4,18 @@
  * токена в localStorage.
  */
 
+/**
+ * Префикс, под которым приложение отдано браузеру: '' для корня сайта,
+ * '/vekha' — если оно живёт разделом внутри чужого домена. Значение
+ * подставляет Vite из `base`, поэтому клиент и сервер согласованы.
+ */
+export const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+
+/** Абсолютный путь к API с учётом префикса. */
+export function apiUrl(path: string): string {
+  return path.startsWith('/') ? `${BASE}${path}` : `${BASE}/${path}`
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -38,7 +50,8 @@ async function unwrap(res: Response): Promise<unknown> {
 }
 
 function url(path: string, params?: Record<string, unknown>): string {
-  if (!params) return path
+  const full = apiUrl(path)
+  if (!params) return full
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === '') continue
@@ -49,11 +62,11 @@ function url(path: string, params?: Record<string, unknown>): string {
     }
   }
   const query = search.toString()
-  return query ? `${path}?${query}` : path
+  return query ? `${full}?${query}` : full
 }
 
 async function send(method: string, path: string, body?: unknown): Promise<unknown> {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     method,
     credentials: 'same-origin',
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -73,7 +86,7 @@ export const api = {
   upload: async <T>(path: string, file: File): Promise<T> => {
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch(path, { method: 'POST', credentials: 'same-origin', body: form })
+    const res = await fetch(apiUrl(path), { method: 'POST', credentials: 'same-origin', body: form })
     return unwrap(res) as Promise<T>
   },
 }

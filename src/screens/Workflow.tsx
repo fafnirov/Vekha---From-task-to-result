@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Avatar, Checkbox, Empty, Icon, Segmented, Toggle, UnderlineTabs } from '../components/ui'
 import { ROLE_LABEL } from '../data/catalog'
-import { api } from '../api/client'
+import { api, BASE } from '../api/client'
 import {
   useApiMutation,
   useBoard,
@@ -986,7 +986,7 @@ function PeopleTab() {
           {(invites.data ?? []).length > 0 && (
             <div className="invites">
               {(invites.data ?? []).map((i) => {
-                const link = `${window.location.origin}/?invite=${i.token}`
+                const link = `${window.location.origin}${BASE}/?invite=${i.token}`
                 return (
                   <div key={i.id} className="invite">
                     <Icon name="mail" size={16} color="var(--tx2)" />

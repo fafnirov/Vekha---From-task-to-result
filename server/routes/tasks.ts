@@ -16,7 +16,7 @@ import { emitChanges } from '../lib/events.js'
 import { runRules } from '../lib/automation.js'
 import { parseQuery, QueryError } from '../lib/query.js'
 import { PRIORITIES, PRIORITY_LABEL, LINK_TYPES, type Priority } from '../lib/constants.js'
-import { UPLOAD_DIR } from '../lib/paths.js'
+import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
 const SORTABLE: Record<string, (dir: 'asc' | 'desc') => Prisma.TaskOrderByWithRelationInput> = {
@@ -237,7 +237,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         mime: a.mime,
         by: a.uploadedBy.code,
         byName: a.uploadedBy.name,
-        url: `/api/attachments/${a.id}`,
+        url: `${BASE_PATH}/api/attachments/${a.id}`,
         createdAt: a.createdAt.toISOString(),
       })),
       transitions: availableTransitions.map((t) => ({
@@ -918,7 +918,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       filename: attachment.filename,
       size: attachment.size,
       mime: attachment.mime,
-      url: `/api/attachments/${attachment.id}`,
+      url: `${BASE_PATH}/api/attachments/${attachment.id}`,
     })
   })
 

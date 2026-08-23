@@ -7,7 +7,7 @@ import multipart from '@fastify/multipart'
 import fastifyStatic from '@fastify/static'
 import { existsSync } from 'node:fs'
 import { prisma } from './lib/prisma.js'
-import { CLIENT_DIR, MAX_UPLOAD_BYTES } from './lib/paths.js'
+import { BASE_PATH, CLIENT_DIR, MAX_UPLOAD_BYTES } from './lib/paths.js'
 import { authRoutes } from './routes/auth.js'
 import { taskRoutes } from './routes/tasks.js'
 import { boardRoutes } from './routes/board.js'
@@ -51,18 +51,28 @@ export async function build() {
     return payload
   })
 
-  app.get('/api/health', async () => ({ ok: true, time: new Date().toISOString() }))
+  /*
+   * Всё приложение — и API, и статика — живёт под BASE_PATH. За обратным
+   * прокси префикс приходит целиком (`/vekha/api/...`), поэтому проще
+   * один раз навесить его на маршруты, чем срезать на каждом запросе.
+   */
+  await app.register(
+    async (scoped) => {
+      scoped.get('/api/health', async () => ({ ok: true, time: new Date().toISOString() }))
 
-  await app.register(authRoutes)
-  await app.register(taskRoutes)
-  await app.register(boardRoutes)
-  await app.register(projectRoutes)
-  await app.register(sprintRoutes)
-  await app.register(workspaceRoutes)
-  await app.register(workflowRoutes)
-  await app.register(filterRoutes)
-  await app.register(reportRoutes)
-  await app.register(feedRoutes)
+      await scoped.register(authRoutes)
+      await scoped.register(taskRoutes)
+      await scoped.register(boardRoutes)
+      await scoped.register(projectRoutes)
+      await scoped.register(sprintRoutes)
+      await scoped.register(workspaceRoutes)
+      await scoped.register(workflowRoutes)
+      await scoped.register(filterRoutes)
+      await scoped.register(reportRoutes)
+      await scoped.register(feedRoutes)
+    },
+    BASE_PATH ? { prefix: BASE_PATH } : {},
+  )
 
   app.setErrorHandler((error: FastifyError, req, reply) => {
     if (error.validation) {
@@ -77,17 +87,26 @@ export async function build() {
   })
 
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/')) {
+    const path = req.url.split('?')[0]
+
+    if (path.startsWith(`${BASE_PATH}/api/`)) {
       return reply.code(404).send({ error: 'Маршрут не найден' })
     }
-    // Одностраничное приложение: любой другой путь отдаёт index.html.
-    if (existsSync(CLIENT_DIR)) return reply.sendFile('index.html')
-    return reply.code(404).send({ error: 'Клиент не собран, выполните npm run build' })
+    if (!existsSync(CLIENT_DIR)) {
+      return reply.code(404).send({ error: 'Клиент не собран, выполните npm run build' })
+    }
+    // Запрос мимо префикса адресован не нам: за прокси там живёт чужое
+    // приложение, и отдавать ему свой index.html нельзя.
+    if (BASE_PATH && path !== BASE_PATH && !path.startsWith(`${BASE_PATH}/`)) {
+      return reply.code(404).send({ error: 'Маршрут не найден' })
+    }
+    // Одностраничное приложение: остальные пути отдают index.html.
+    return reply.sendFile('index.html')
   })
 
   // В продакшене тот же процесс раздаёт собранный фронтенд.
   if (existsSync(CLIENT_DIR)) {
-    await app.register(fastifyStatic, { root: CLIENT_DIR, prefix: '/' })
+    await app.register(fastifyStatic, { root: CLIENT_DIR, prefix: `${BASE_PATH}/` })
   }
 
   return app
@@ -108,7 +127,7 @@ async function main() {
   process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
   await app.listen({ port: PORT, host: HOST })
-  console.log(`API Vekha слушает http://${HOST}:${PORT}`)
+  console.log(`Vekha слушает http://${HOST}:${PORT}${BASE_PATH || ''}/`)
 }
 
 main().catch((err) => {

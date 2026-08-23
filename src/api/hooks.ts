@@ -11,7 +11,7 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from '@tanstack/react-query'
-import { api } from './client'
+import { api, apiUrl } from './client'
 import type {
   Board,
   Burndown,
@@ -99,7 +99,7 @@ export function useLiveUpdates(enabled: boolean): void {
 
   useEffect(() => {
     if (!enabled) return
-    const source = new EventSource('/api/events', { withCredentials: true })
+    const source = new EventSource(apiUrl('/api/events'), { withCredentials: true })
 
     source.onmessage = (event) => {
       try {

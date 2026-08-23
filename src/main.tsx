@@ -6,6 +6,7 @@ import { App } from './App'
 import { AppProvider } from './store/app'
 import { UiProvider } from './store/ui'
 import { SessionProvider } from './store/session'
+import { BASE } from './api/client'
 
 import './styles/tokens.css'
 import './styles/base.css'
@@ -30,7 +31,7 @@ if (!root) throw new Error('#root not found')
 
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={BASE || undefined}>
       <QueryClientProvider client={queryClient}>
         <AppProvider>
           <SessionProvider>
