@@ -19,6 +19,7 @@ import { filterRoutes } from './routes/filters.js'
 import { reportRoutes } from './routes/reports.js'
 import { feedRoutes } from './routes/feed.js'
 import { startDailyJobs } from './jobs.js'
+import { bootstrap } from './bootstrap.js'
 
 const PORT = Number(process.env.PORT ?? 4180)
 const HOST = process.env.HOST ?? '127.0.0.1'
@@ -113,6 +114,9 @@ export async function build() {
 }
 
 async function main() {
+  // До приёма запросов: без прав и воркфлоу приложение бесполезно.
+  await bootstrap()
+
   const app = await build()
   const stopJobs = startDailyJobs()
 

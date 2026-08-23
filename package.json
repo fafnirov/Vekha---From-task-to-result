@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json",
     "test": "node --test --import tsx server/**/*.test.ts",
     "postinstall": "node scripts/ensure-env.mjs && prisma generate",
-    "setup": "npm run db:deploy && npm run seed"
+    "setup": "npm run db:deploy && npm run seed",
+    "db:clean": "tsx prisma/clean.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

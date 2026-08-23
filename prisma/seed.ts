@@ -12,12 +12,9 @@
 
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
-import {
-  AVATAR_PALETTE,
-  DEFAULT_PERMISSIONS,
-  PERMISSION_KEYS,
-  ROLES,
-} from '../server/lib/constants.js'
+import { AVATAR_PALETTE } from '../server/lib/constants.js'
+import { DEFAULT_STATUSES, DEFAULT_TRANSITIONS } from '../server/lib/defaults.js'
+import { bootstrap } from '../server/bootstrap.js'
 import { codeFrom, initialsFrom, startOfDay } from '../server/lib/format.js'
 
 const prisma = new PrismaClient()
@@ -54,41 +51,6 @@ const PEOPLE = [
   { name: 'Игорь Волков', email: 'igor@nordsoft.ru', jobTitle: 'Mobile', role: 'member' },
   { name: 'Елена Лапина', email: 'elena@nordsoft.ru', jobTitle: 'QA / Security', role: 'manager' },
   { name: 'Павел Гущин', email: 'pavel@nordsoft.ru', jobTitle: 'Integrations', role: 'member' },
-]
-
-const STATUSES = [
-  { name: 'New', category: 'todo' },
-  { name: 'Open', category: 'todo' },
-  { name: 'In Progress', category: 'inprogress' },
-  { name: 'Review', category: 'inprogress' },
-  { name: 'Testing', category: 'inprogress' },
-  { name: 'Done', category: 'done' },
-  { name: 'Blocked', category: 'blocked' },
-]
-
-/** Граф переходов: вперёд по потоку, назад на доработку и в блокировку. */
-const TRANSITIONS: [string, string, string, string][] = [
-  ['New', 'Open', 'заполнены обязательные поля', 'member'],
-  ['New', 'In Progress', 'назначен исполнитель', 'member'],
-  ['Open', 'In Progress', 'назначен исполнитель', 'member'],
-  ['Open', 'New', 'возврат в очередь', 'member'],
-  ['In Progress', 'Review', 'указана оценка, есть описание', 'member'],
-  ['In Progress', 'Open', 'работа приостановлена', 'member'],
-  ['In Progress', 'Done', 'изменение не требует ревью', 'manager'],
-  ['Review', 'Testing', 'ревью одобрено', 'member'],
-  ['Review', 'In Progress', 'есть замечания', 'member'],
-  ['Review', 'Done', 'ревью одобрено, тесты не нужны', 'manager'],
-  ['Testing', 'Done', 'регресс пройден, чек-лист закрыт', 'manager'],
-  ['Testing', 'In Progress', 'найдены дефекты', 'member'],
-  ['Testing', 'Review', 'нужен повторный просмотр', 'member'],
-  ['Done', 'In Progress', 'задача переоткрыта', 'manager'],
-  ['Done', 'Open', 'задача переоткрыта', 'manager'],
-  ['In Progress', 'Blocked', 'указана причина блокировки', 'member'],
-  ['Review', 'Blocked', 'указана причина блокировки', 'member'],
-  ['Testing', 'Blocked', 'указана причина блокировки', 'member'],
-  ['Open', 'Blocked', 'указана причина блокировки', 'member'],
-  ['Blocked', 'In Progress', 'блокировка снята', 'member'],
-  ['Blocked', 'Open', 'блокировка снята', 'member'],
 ]
 
 const WORKFLOWS = ['Разработка', 'Интеграции', 'Аудит', 'Релизный']
@@ -340,25 +302,6 @@ const TEAMS = [
   { name: 'Качество и безопасность', abbr: 'КБ', note: 'QA, регресс, аудит доступа', members: ['EL', 'MN'] },
 ]
 
-const FIELDS = [
-  { key: 'title', label: 'Заголовок', type: 'string', icon: 'title', screen: 'Все', required: true, onCard: true, system: true },
-  { key: 'description', label: 'Описание', type: 'text', icon: 'description', screen: 'Все', required: false, onCard: false, system: true },
-  { key: 'assignee', label: 'Исполнитель', type: 'user', icon: 'person', screen: 'Все', required: true, onCard: true, system: true },
-  { key: 'sprint', label: 'Спринт', type: 'sprint', icon: 'rotate_right', screen: 'Agile', required: false, onCard: true, system: true },
-  { key: 'estimate', label: 'Оценка (SP)', type: 'number', icon: 'straighten', screen: 'Agile', required: false, onCard: true, system: true },
-  { key: 'component', label: 'Компонент', type: 'enum', icon: 'category', screen: 'Все', required: false, onCard: false, system: false },
-  { key: 'dueDate', label: 'Дедлайн', type: 'date', icon: 'calendar_today', screen: 'Все', required: false, onCard: true, system: true },
-  { key: 'regression', label: 'Регресс проверен', type: 'boolean', icon: 'check_box', screen: 'QA', required: false, onCard: false, system: false },
-]
-
-const BOARD_COLUMNS = [
-  { name: 'Backlog', statuses: ['New'], wipLimit: 0, order: 0 },
-  { name: 'To Do', statuses: ['Open'], wipLimit: 0, order: 1 },
-  { name: 'In Progress', statuses: ['In Progress', 'Blocked'], wipLimit: 6, order: 2 },
-  { name: 'Review', statuses: ['Review', 'Testing'], wipLimit: 4, order: 3 },
-  { name: 'Done', statuses: ['Done'], wipLimit: 0, order: 4 },
-]
-
 const RULES = [
   {
     name: 'Перевод в Review уведомляет ревьюера',
@@ -394,29 +337,6 @@ const RULES = [
     condition: { all: [{ field: 'tags', op: 'contains', value: 'security' }] },
     actions: [{ type: 'set_assignee', value: 'EL' }],
     icon: 'person_add', iconFg: 'var(--ac)', enabled: false, runs: 132,
-  },
-]
-
-const TEMPLATES = [
-  {
-    name: 'Баг', icon: 'bug_report', tags: ['bug', 'qa'],
-    note: 'Шаги воспроизведения, ожидаемое и фактическое поведение, окружение.',
-    body: 'Шаги воспроизведения:\n1.\n2.\n\nОжидаемое поведение:\n\nФактическое поведение:\n\nОкружение:',
-  },
-  {
-    name: 'Дизайн-задача', icon: 'design_services', tags: ['ui', 'design'],
-    note: 'Контекст, ограничения, состояния макета и критерии приёмки.',
-    body: 'Контекст:\n\nОграничения:\n\nСостояния:\n\nКритерии приёмки:',
-  },
-  {
-    name: 'Интеграция', icon: 'sync_alt', tags: ['api', 'integration'],
-    note: 'Контракт API, маппинг полей, обработка ошибок и лимиты.',
-    body: 'Контракт API:\n\nМаппинг полей:\n\nОбработка ошибок:\n\nЛимиты:',
-  },
-  {
-    name: 'Релизный чек-лист', icon: 'checklist', tags: ['release', 'qa'],
-    note: 'Регресс, миграции, откат, оповещение поддержки и заказчика.',
-    body: 'Регресс:\n\nМиграции:\n\nПлан отката:\n\nОповещения:',
   },
 ]
 
@@ -482,26 +402,11 @@ async function main() {
     data: { name: 'Норд Софт', unit: 'Продуктовая команда', mark: 'Н' },
   })
 
-  /* Права ролей */
-  for (const permission of PERMISSION_KEYS) {
-    for (const role of ROLES) {
-      await prisma.rolePermission.create({
-        data: {
-          key: permission.key,
-          role,
-          allowed: DEFAULT_PERMISSIONS[permission.key]?.includes(role) ?? false,
-        },
-      })
-    }
-  }
-
-  /* Поля задачи и колонки доски */
-  await prisma.taskField.createMany({
-    data: FIELDS.map((f, order) => ({ ...f, order })),
-  })
-  await prisma.boardColumn.createMany({
-    data: BOARD_COLUMNS.map((c) => ({ ...c, statuses: JSON.stringify(c.statuses) })),
-  })
+  /*
+   * Каркас — права, поля, колонки доски, шаблоны и воркфлоу «Разработка» —
+   * создаёт общий bootstrap. Наполнение добавляет поверх него содержимое.
+   */
+  await bootstrap()
 
   /* Люди */
   const passwordHash = await bcrypt.hash(PASSWORD, 12)
@@ -529,25 +434,32 @@ async function main() {
   const userId = (code: string | null) => (code ? (users.get(code) ?? null) : null)
   const adminId = users.get('AK')!
 
-  /* Воркфлоу и статусы */
+  /* Воркфлоу и статусы: «Разработка» уже есть, остальные заводим здесь. */
   const statusIds = new Map<string, string>() // "воркфлоу|статус" → id
+
   for (const name of WORKFLOWS) {
-    const workflow = await prisma.workflow.create({ data: { name } })
-    for (const [order, s] of STATUSES.entries()) {
-      const status = await prisma.status.create({
-        data: { workflowId: workflow.id, name: s.name, category: s.category, order },
-      })
-      statusIds.set(`${name}|${s.name}`, status.id)
+    const workflow =
+      (await prisma.workflow.findUnique({ where: { name } })) ??
+      (await prisma.workflow.create({ data: { name } }))
+
+    for (const [order, st] of DEFAULT_STATUSES.entries()) {
+      const status =
+        (await prisma.status.findUnique({
+          where: { workflowId_name: { workflowId: workflow.id, name: st.name } },
+        })) ??
+        (await prisma.status.create({
+          data: { workflowId: workflow.id, name: st.name, category: st.category, order },
+        }))
+      statusIds.set(`${name}|${st.name}`, status.id)
     }
-    for (const [from, to, condition, role] of TRANSITIONS) {
-      await prisma.transition.create({
-        data: {
-          workflowId: workflow.id,
-          fromId: statusIds.get(`${name}|${from}`)!,
-          toId: statusIds.get(`${name}|${to}`)!,
-          condition,
-          role,
-        },
+
+    for (const [from, to, condition, role] of DEFAULT_TRANSITIONS) {
+      const fromId = statusIds.get(`${name}|${from}`)!
+      const toId = statusIds.get(`${name}|${to}`)!
+      await prisma.transition.upsert({
+        where: { fromId_toId: { fromId, toId } },
+        create: { workflowId: workflow.id, fromId, toId, condition, role },
+        update: {},
       })
     }
   }
@@ -885,12 +797,6 @@ async function main() {
         runCount: r.runs,
         lastRunAt: day(-1, 9),
       },
-    })
-  }
-
-  for (const t of TEMPLATES) {
-    await prisma.taskTemplate.create({
-      data: { name: t.name, icon: t.icon, note: t.note, body: t.body, tags: JSON.stringify(t.tags) },
     })
   }
 
