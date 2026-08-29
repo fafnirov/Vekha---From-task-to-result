@@ -17,7 +17,7 @@ import { runRules } from '../lib/automation.js'
 import { parseQuery, QueryError } from '../lib/query.js'
 import { PRIORITIES, PRIORITY_LABEL, LINK_TYPES, type Priority } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
-import { taskScope, canSeeQueue } from '../lib/access.js'
+import { taskScope, canSeeQueue, visibleTask } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
 const SORTABLE: Record<string, (dir: 'asc' | 'desc') => Prisma.TaskOrderByWithRelationInput> = {
@@ -668,7 +668,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/tasks/:key/comments', async (req, reply) => {
     const { key } = req.params as { key: string }
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const rows = await prisma.comment.findMany({
@@ -688,7 +688,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: parsed.error.issues[0].message })
     }
 
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const comment = await prisma.comment.create({
@@ -735,7 +735,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Комментарий пуст' })
 
-    const comment = await prisma.comment.findUnique({ where: { id } })
+    const comment = await prisma.comment.findFirst({
+      where: { id, task: taskScope(req.user!) },
+    })
     if (!comment) return reply.code(404).send({ error: 'Комментарий не найден' })
     if (comment.authorId !== req.user!.id) {
       return reply.code(403).send({ error: 'Можно править только свои комментарии' })
@@ -752,7 +754,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/comments/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
-    const comment = await prisma.comment.findUnique({ where: { id } })
+    const comment = await prisma.comment.findFirst({
+      where: { id, task: taskScope(req.user!) },
+    })
     if (!comment) return reply.code(404).send({ error: 'Комментарий не найден' })
 
     const mine = comment.authorId === req.user!.id
@@ -768,7 +772,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/tasks/:key/history', async (req, reply) => {
     const { key } = req.params as { key: string }
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const rows = await prisma.activity.findMany({
@@ -788,7 +792,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/tasks/:key/watch', async (req, reply) => {
     const { key } = req.params as { key: string }
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const existing = await prisma.watcher.findUnique({
@@ -810,7 +814,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Укажите участника' })
 
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const userId = await resolveUser(parsed.data.user)
@@ -823,7 +827,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/tasks/:key/watchers/:user', async (req, reply) => {
     const { key, user } = req.params as { key: string; user: string }
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const userId = await resolveUser(user)
@@ -848,8 +852,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'Укажите задачу и тип связи' })
 
     const [from, to] = await Promise.all([
-      prisma.task.findUnique({ where: { key: key.toUpperCase() } }),
-      prisma.task.findUnique({ where: { key: parsed.data.target.toUpperCase() } }),
+      prisma.task.findFirst({ where: visibleTask(req.user!, key) }),
+      prisma.task.findFirst({ where: visibleTask(req.user!, parsed.data.target) }),
     ])
     if (!from || !to) return reply.code(404).send({ error: 'Задача не найдена' })
     if (from.id === to.id) return reply.code(400).send({ error: 'Нельзя связать задачу с собой' })
@@ -878,8 +882,14 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true }
   })
 
-  app.delete('/api/links/:id', async (req) => {
+  app.delete('/api/links/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
+    // Связь удаляется только из задачи, которая пользователю видна.
+    const link = await prisma.taskLink.findFirst({
+      where: { id, from: taskScope(req.user!) },
+    })
+    if (!link) return reply.code(404).send({ error: 'Связь не найдена' })
+
     await prisma.taskLink.delete({ where: { id } }).catch(() => undefined)
     emitChanges(['tasks'])
     return { ok: true }
@@ -897,7 +907,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Укажите количество минут' })
 
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     await prisma.worklog.create({
@@ -917,7 +927,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/tasks/:key/attachments', async (req, reply) => {
     const { key } = req.params as { key: string }
-    const task = await prisma.task.findUnique({ where: { key: key.toUpperCase() } })
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
     const file = await req.file()
@@ -966,7 +976,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/attachments/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
-    const attachment = await prisma.attachment.findUnique({ where: { id } })
+    const attachment = await prisma.attachment.findFirst({
+      where: { id, task: taskScope(req.user!) },
+    })
     if (!attachment) return reply.code(404).send({ error: 'Вложение не найдено' })
 
     // Имя файла на диске сгенерировано сервером, но путь всё равно
@@ -988,7 +1000,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/attachments/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
-    const attachment = await prisma.attachment.findUnique({ where: { id } })
+    const attachment = await prisma.attachment.findFirst({
+      where: { id, task: taskScope(req.user!) },
+    })
     if (!attachment) return reply.code(404).send({ error: 'Вложение не найдено' })
 
     const mine = attachment.uploadedById === req.user!.id

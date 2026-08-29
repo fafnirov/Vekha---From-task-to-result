@@ -54,3 +54,16 @@ export function queueScope(user: SessionUser): Prisma.QueueWhereInput {
   const allowed = user.role === 'manager' ? MANAGER : OPEN
   return { OR: [{ access: { in: allowed } }, { ownerId: user.id }] }
 }
+
+/**
+ * Условие поиска задачи по ключу с учётом видимости очереди.
+ *
+ * Проверка доступа встроена в сам запрос, поэтому её нельзя забыть на
+ * очередном подмаршруте: комментарии, историю и вложения закрытой очереди
+ * раньше отдавал любой прямой вызов, минуя проверку на карточке.
+ *
+ *   const task = await prisma.task.findFirst({ where: visibleTask(user, key) })
+ */
+export function visibleTask(user: SessionUser, key: string): Prisma.TaskWhereInput {
+  return { AND: [{ key: key.toUpperCase() }, taskScope(user)] }
+}
