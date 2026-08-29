@@ -18,9 +18,18 @@ import { useSession } from '../store/session'
 import { useApp } from '../store/app'
 import type { AccessRole, Workflow as WorkflowType } from '../data/types'
 
-type TabId = 'workflow' | 'fields' | 'permissions' | 'rules' | 'templates' | 'people' | 'board'
+type TabId =
+  | 'org'
+  | 'workflow'
+  | 'fields'
+  | 'permissions'
+  | 'rules'
+  | 'templates'
+  | 'people'
+  | 'board'
 
 const TABS: { value: TabId; label: string }[] = [
+  { value: 'org', label: 'Организация' },
   { value: 'workflow', label: 'Воркфлоу' },
   { value: 'fields', label: 'Поля' },
   { value: 'permissions', label: 'Права' },
@@ -34,7 +43,7 @@ export function Workflow() {
   const [params, setParams] = useSearchParams()
   const { can } = useSession()
   const tabParam = params.get('tab') as TabId | null
-  const [tab, setTab] = useState<TabId>(tabParam ?? 'workflow')
+  const [tab, setTab] = useState<TabId>(tabParam ?? 'org')
 
   useEffect(() => {
     if (tabParam && tabParam !== tab) setTab(tabParam)
@@ -62,6 +71,7 @@ export function Workflow() {
       <UnderlineTabs options={TABS} value={tab} onChange={pickTab} />
 
       <div style={{ marginTop: 12 }}>
+        {tab === 'org' && <OrgTab manage={manage} />}
         {tab === 'workflow' && <WorkflowTab manage={manage} />}
         {tab === 'fields' && <FieldsTab manage={manage} />}
         {tab === 'permissions' && <PermissionsTab manage={manage} />}
@@ -71,6 +81,108 @@ export function Workflow() {
         {tab === 'people' && <PeopleTab />}
       </div>
     </div>
+  )
+}
+
+/* ── Организация ──────────────────────────────────────────────────────── */
+
+function OrgTab({ manage }: { manage: boolean }) {
+  const { org } = useSession()
+  const { toast, toastError } = useApp()
+
+  const [name, setName] = useState(org.name)
+  const [unit, setUnit] = useState(org.unit)
+  const [mark, setMark] = useState(org.mark)
+
+  // Значения приходят асинхронно: пока запрос не вернулся, в полях заглушка.
+  useEffect(() => {
+    setName(org.name)
+    setUnit(org.unit)
+    setMark(org.mark)
+  }, [org.name, org.unit, org.mark])
+
+  const save = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.patch('/api/org', body),
+    ['org'],
+  )
+
+  const changed = name !== org.name || unit !== org.unit || mark !== org.mark
+
+  return (
+    <section className="card card--pad" style={{ maxWidth: 560 }}>
+      <div className="card__title" style={{ marginBottom: 4 }}>
+        Название пространства
+      </div>
+      <p className="report__hint" style={{ marginBottom: 12 }}>
+        Видно в боковой панели, в хлебных крошках и на экране входа.
+      </p>
+
+      <div className="grid-2">
+        <label className="label">
+          <span>Название</span>
+          <input
+            className="input"
+            value={name}
+            disabled={!manage}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Например: KavoNet"
+          />
+        </label>
+        <label className="label">
+          <span>Подпись под названием</span>
+          <input
+            className="input"
+            value={unit}
+            disabled={!manage}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="Например: Продуктовая команда"
+          />
+        </label>
+      </div>
+
+      <label className="label" style={{ marginTop: 12, maxWidth: 160 }}>
+        <span>Монограмма</span>
+        <input
+          className="input"
+          value={mark}
+          disabled={!manage}
+          maxLength={2}
+          onChange={(e) => setMark(e.target.value)}
+          placeholder="K"
+        />
+      </label>
+
+      {manage && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={!changed || name.trim().length < 2 || save.isPending}
+            onClick={() =>
+              void save
+                .mutateAsync({ name: name.trim(), unit: unit.trim(), mark: mark.trim() || name.trim()[0] })
+                .then(() => toast('Сохранено', name.trim(), 'ok'))
+                .catch(toastError)
+            }
+          >
+            Сохранить
+          </button>
+          {changed && (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => {
+                setName(org.name)
+                setUnit(org.unit)
+                setMark(org.mark)
+              }}
+            >
+              Отменить
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 

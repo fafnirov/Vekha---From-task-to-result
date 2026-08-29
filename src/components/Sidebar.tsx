@@ -13,7 +13,7 @@ function isActive(item: NavItem, pathname: string): boolean {
 
 export function Sidebar() {
   const { navCollapsed, toggleNav, theme, toggleTheme, toast, toastError } = useApp()
-  const { me, org, logout } = useSession()
+  const { me, org, logout, can } = useSession()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -79,7 +79,12 @@ export function Sidebar() {
       <button
         type="button"
         className="org"
-        onClick={() => toast('Рабочее пространство', `${org.name} · ${org.unit}`, 'info')}
+        onClick={() =>
+          can('workflow.manage')
+            ? navigate('/workflow?tab=org')
+            : toast('Рабочее пространство', `${org.name} · ${org.unit}`, 'info')
+        }
+        title={can('workflow.manage') ? 'Настройки пространства' : org.name}
       >
         <span className="org__mark">{org.mark}</span>
         {expanded && (
