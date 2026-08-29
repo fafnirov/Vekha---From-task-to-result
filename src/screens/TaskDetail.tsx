@@ -12,6 +12,8 @@ import {
   UnderlineTabs,
 } from '../components/ui'
 import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, fileSize } from '../data/catalog'
+import { Checklist } from '../components/Checklist'
+import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
 import { api, ApiError } from '../api/client'
 import {
   useAddComment,
@@ -22,6 +24,7 @@ import {
   useProjects,
   useSprints,
   useTask,
+  useTaskTypes,
   useUpdateTask,
 } from '../api/hooks'
 import { useSession } from '../store/session'
@@ -48,6 +51,7 @@ export function TaskDetail() {
   const history = useHistory(key)
   const projects = useProjects()
   const sprints = useSprints()
+  const taskTypes = useTaskTypes()
   const update = useUpdateTask()
   const addComment = useAddComment()
 
@@ -58,6 +62,8 @@ export function TaskDetail() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [linkOpen, setLinkOpen] = useState(false)
+  /* Диалог причины закрытия: сервер присылает варианты вместе с отказом. */
+  const [closing, setClosing] = useState<{ to: string; options: ResolutionOption[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const task = detail.data?.task
@@ -132,8 +138,17 @@ export function TaskDetail() {
   async function patch(body: Record<string, unknown>, note?: string) {
     try {
       await update.mutateAsync({ key, patch: body })
+      setClosing(null)
       if (note) toast('Сохранено', note, 'ok')
     } catch (err) {
+      // Закрытие требует причины — сервер прислал варианты, спрашиваем.
+      if (err instanceof ApiError && err.status === 422) {
+        const payload = err.data as { resolutionRequired?: boolean; resolutions?: ResolutionOption[] }
+        if (payload?.resolutionRequired && payload.resolutions?.length) {
+          setClosing({ to: String(body.status ?? ''), options: payload.resolutions })
+          return
+        }
+      }
       // Отказ воркфлоу приходит как 422 — показываем причину дословно.
       toastError(err, err instanceof ApiError && err.status === 422 ? 'Переход запрещён' : 'Не сохранилось')
     }
@@ -354,6 +369,8 @@ export function TaskDetail() {
             </div>
           ))}
         </section>
+
+        <Checklist taskKey={key} editable={editable} />
 
         {/* ── Связи ────────────────────────────────────────────────────── */}
         <section className="card card--clip" style={{ marginTop: 12 }}>
@@ -596,6 +613,48 @@ export function TaskDetail() {
             </div>
           </Field>
 
+          <Field label="Тип">
+            <div className="select-with-avatar">
+              <Icon name={task.typeIcon} size={16} color={task.typeColor} />
+              <select
+                className="select"
+                value={task.type ?? ''}
+                disabled={!editable}
+                onChange={(e) => void patch({ type: e.target.value || null }, 'Тип изменён')}
+              >
+                {(taskTypes.data ?? []).map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Field>
+
+          {task.resolution && (
+            <Field label="Резолюция">
+              <span
+                className="badge badge--sm"
+                style={{
+                  background:
+                    task.resolutionKind === 'success'
+                      ? 'var(--ok-bg)'
+                      : task.resolutionKind === 'rejected'
+                        ? 'var(--dang-bg)'
+                        : 'var(--n-bg)',
+                  color:
+                    task.resolutionKind === 'success'
+                      ? 'var(--ok)'
+                      : task.resolutionKind === 'rejected'
+                        ? 'var(--dang)'
+                        : 'var(--tx2)',
+                }}
+              >
+                {task.resolution}
+              </span>
+            </Field>
+          )}
+
           <Field label="Приоритет">
             <div className="select-with-avatar">
               <PriorityChip priority={task.priority} small />
@@ -754,6 +813,19 @@ export function TaskDetail() {
           )}
         </div>
       </aside>
+
+      {closing && (
+        <ResolutionDialog
+          taskKey={task.key}
+          status={closing.to}
+          options={closing.options}
+          busy={update.isPending}
+          onClose={() => setClosing(null)}
+          onPick={(resolution) =>
+            void patch({ status: closing.to, resolution }, `${task.status} → ${closing.to}`)
+          }
+        />
+      )}
 
       {linkOpen && (
         <LinkDialog

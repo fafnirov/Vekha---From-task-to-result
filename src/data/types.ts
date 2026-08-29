@@ -58,6 +58,14 @@ export interface Task {
   status: StatusName
   statusId: string
   statusCategory: StatusCategory
+  type: string | null
+  typeId: string | null
+  typeIcon: string
+  typeColor: string
+  isEpic: boolean
+  resolution: string | null
+  resolutionId: string | null
+  resolutionKind: string | null
   priority: PriorityName
   priorityKey: PriorityKey
   who: PersonId | null
@@ -121,6 +129,38 @@ export interface TaskDetail {
     condition: string
     role: string
   }[]
+}
+
+export interface TaskType {
+  id: string
+  name: string
+  icon: string
+  color: string
+  epic: boolean
+  system: boolean
+  n: number
+}
+
+export interface Resolution {
+  id: string
+  name: string
+  /** success | neutral | rejected — влияет на цвет и на отчёты. */
+  kind: string
+  system: boolean
+  n: number
+}
+
+export interface ChecklistItem {
+  id: string
+  text: string
+  done: boolean
+  who: PersonId | null
+  whoName: string | null
+  due: string
+  dueDate: string | null
+  /** Ключ задачи, в которую пункт был превращён. */
+  spawnedKey: string | null
+  order: number
 }
 
 export interface Queue {

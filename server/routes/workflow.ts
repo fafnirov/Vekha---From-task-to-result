@@ -172,6 +172,131 @@ export async function workflowRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true }
   })
 
+  /* ── Типы задач и резолюции ───────────────────────────────────────── */
+
+  app.get('/api/task-types', async () => {
+    const types = await prisma.taskType.findMany({
+      include: { _count: { select: { tasks: true } } },
+      orderBy: { order: 'asc' },
+    })
+    return types.map((t) => ({
+      id: t.id,
+      name: t.name,
+      icon: t.icon,
+      color: t.color,
+      epic: t.epic,
+      system: t.system,
+      n: t._count.tasks,
+    }))
+  })
+
+  app.post('/api/task-types', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'workflow.manage'))) return
+
+    const schema = z.object({
+      name: z.string().trim().min(2, 'Укажите название типа'),
+      icon: z.string().default('task_alt'),
+      color: z.string().default('var(--tx2)'),
+      epic: z.boolean().default(false),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0].message })
+    }
+
+    const exists = await prisma.taskType.findUnique({ where: { name: parsed.data.name } })
+    if (exists) return reply.code(409).send({ error: 'Такой тип уже есть' })
+
+    const last = await prisma.taskType.findFirst({ orderBy: { order: 'desc' } })
+    const type = await prisma.taskType.create({
+      data: { ...parsed.data, order: (last?.order ?? -1) + 1 },
+    })
+
+    emitChanges(['workflow'])
+    return reply.code(201).send({ id: type.id })
+  })
+
+  app.patch('/api/task-types/:id', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'workflow.manage'))) return
+
+    const { id } = req.params as { id: string }
+    const schema = z.object({
+      name: z.string().trim().min(2).optional(),
+      icon: z.string().optional(),
+      color: z.string().optional(),
+      epic: z.boolean().optional(),
+      order: z.number().int().min(0).optional(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
+
+    await prisma.taskType.update({ where: { id }, data: parsed.data })
+    emitChanges(['workflow', 'tasks'])
+    return { ok: true }
+  })
+
+  app.delete('/api/task-types/:id', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'workflow.manage'))) return
+
+    const { id } = req.params as { id: string }
+    const used = await prisma.task.count({ where: { typeId: id } })
+    if (used > 0) return reply.code(409).send({ error: `Тип используют ${used} задач` })
+
+    await prisma.taskType.delete({ where: { id } }).catch(() => undefined)
+    emitChanges(['workflow'])
+    return { ok: true }
+  })
+
+  app.get('/api/resolutions', async () => {
+    const rows = await prisma.resolution.findMany({
+      include: { _count: { select: { tasks: true } } },
+      orderBy: { order: 'asc' },
+    })
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      kind: r.kind,
+      system: r.system,
+      n: r._count.tasks,
+    }))
+  })
+
+  app.post('/api/resolutions', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'workflow.manage'))) return
+
+    const schema = z.object({
+      name: z.string().trim().min(2, 'Укажите название резолюции'),
+      kind: z.enum(['success', 'neutral', 'rejected']).default('neutral'),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0].message })
+    }
+
+    const exists = await prisma.resolution.findUnique({ where: { name: parsed.data.name } })
+    if (exists) return reply.code(409).send({ error: 'Такая резолюция уже есть' })
+
+    const last = await prisma.resolution.findFirst({ orderBy: { order: 'desc' } })
+    const created = await prisma.resolution.create({
+      data: { ...parsed.data, order: (last?.order ?? -1) + 1 },
+    })
+
+    emitChanges(['workflow'])
+    return reply.code(201).send({ id: created.id })
+  })
+
+  app.delete('/api/resolutions/:id', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'workflow.manage'))) return
+
+    const { id } = req.params as { id: string }
+    const used = await prisma.task.count({ where: { resolutionId: id } })
+    if (used > 0) return reply.code(409).send({ error: `Резолюцию используют ${used} задач` })
+
+    await prisma.resolution.delete({ where: { id } }).catch(() => undefined)
+    emitChanges(['workflow'])
+    return { ok: true }
+  })
+
   /* ── Поля задачи ──────────────────────────────────────────────────── */
 
   app.get('/api/fields', async () => {

@@ -1616,3 +1616,88 @@
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
+
+/* ── Чек-лист ───────────────────────────────────────────────────────── */
+
+.checkitem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px;
+  border-bottom: 1px solid var(--border-row);
+  min-height: 34px;
+}
+
+.checkitem:last-child {
+  border-bottom: 0;
+}
+
+.checkitem__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.checkitem__text--done {
+  color: var(--tx3);
+  text-decoration: line-through;
+}
+
+.checkitem__link {
+  font-size: 11px;
+  color: var(--ac-tx);
+  text-decoration: none;
+}
+
+.checkitem--add {
+  background: var(--surface2);
+}
+
+/* Поле ввода без рамки: строка добавления не должна спорить со списком. */
+.input--bare {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
+}
+
+.input--bare:focus {
+  box-shadow: none;
+  border-color: transparent;
+}
+
+/* ── Выбор причины закрытия ─────────────────────────────────────────── */
+
+.resolutions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resolution {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--tx);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
+}
+
+.resolution:hover {
+  border-color: var(--border3);
+  background: var(--surface2);
+}
+
+.resolution--on {
+  border-color: var(--ac);
+  background: var(--ac-soft);
+}

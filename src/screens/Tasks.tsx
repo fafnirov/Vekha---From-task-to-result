@@ -511,6 +511,12 @@ export function Tasks() {
                   />
                   <TaskKey>{t.key}</TaskKey>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    <Icon
+                      name={t.typeIcon}
+                      size={15}
+                      color={t.typeColor}
+                      title={t.type ?? undefined}
+                    />
                     <span className="ellipsis" style={{ fontSize: 13 }}>
                       {t.title}
                     </span>

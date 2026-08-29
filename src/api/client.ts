@@ -20,6 +20,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Тело ответа целиком: сервер прикладывает к отказу подробности. */
+    readonly data: unknown = null,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -44,7 +46,7 @@ async function unwrap(res: Response): Promise<unknown> {
       data && typeof data === 'object' && 'error' in data
         ? String((data as { error: unknown }).error)
         : `Ошибка ${res.status}`
-    throw new ApiError(message, res.status)
+    throw new ApiError(message, res.status, data)
   }
   return data
 }

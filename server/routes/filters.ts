@@ -145,7 +145,7 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
 
   /** Значения для выпадающих списков конструктора условий. */
   app.get('/api/filters/fields', async () => {
-    const [queues, statuses, projects, sprints, tags, people] = await Promise.all([
+    const [queues, statuses, projects, sprints, tags, types, resolutions, people] = await Promise.all([
       prisma.queue.findMany({ select: { key: true, name: true }, orderBy: { key: 'asc' } }),
       prisma.status.findMany({
         select: { name: true, category: true },
@@ -155,6 +155,8 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
       prisma.project.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
       prisma.sprint.findMany({ select: { name: true }, orderBy: { startDate: 'desc' } }),
       prisma.tag.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
+      prisma.taskType.findMany({ select: { name: true }, orderBy: { order: 'asc' } }),
+      prisma.resolution.findMany({ select: { name: true }, orderBy: { order: 'asc' } }),
       prisma.user.findMany({
         where: { active: true },
         select: { code: true, name: true },
@@ -177,6 +179,13 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
         { key: 'project', label: 'Проект', icon: 'folder', values: projects.map((p) => p.name) },
         { key: 'sprint', label: 'Спринт', icon: 'rotate_right', values: sprints.map((s) => s.name) },
         { key: 'tag', label: 'Тег', icon: 'label', values: tags.map((t) => t.name) },
+        { key: 'type', label: 'Тип задачи', icon: 'category', values: types.map((t) => t.name) },
+        {
+          key: 'resolution',
+          label: 'Резолюция',
+          icon: 'task_alt',
+          values: [...resolutions.map((r) => r.name), 'empty()'],
+        },
         {
           key: 'deadline',
           label: 'Дедлайн',

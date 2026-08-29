@@ -38,6 +38,9 @@ import type {
   TaskField,
   TaskPage,
   TaskTemplate,
+  TaskType,
+  Resolution,
+  ChecklistItem,
   Team,
   Workflow,
 } from '../data/types'
@@ -64,6 +67,9 @@ export const keys = {
   permissions: ['permissions'] as const,
   rules: ['rules'] as const,
   templates: ['templates'] as const,
+  taskTypes: ['taskTypes'] as const,
+  resolutions: ['resolutions'] as const,
+  checklist: (key: string) => ['checklist', key] as const,
   filters: ['filters'] as const,
   filterFields: ['filterFields'] as const,
   reports: (params: unknown) => ['reports', params] as const,
@@ -78,7 +84,7 @@ export const keys = {
 
 /** Какие ключи обновлять, когда сервер сообщает об изменении области. */
 const SCOPE_KEYS: Record<string, string[][]> = {
-  tasks: [['tasks'], ['task'], ['dashboard'], ['reports'], ['filters'], ['activity']],
+  tasks: [['tasks'], ['task'], ['dashboard'], ['reports'], ['filters'], ['activity'], ['checklist']],
   board: [['board'], ['dashboard']],
   comments: [['comments'], ['task'], ['history'], ['activity']],
   notifications: [['notifications'], ['dashboard']],
@@ -86,7 +92,16 @@ const SCOPE_KEYS: Record<string, string[][]> = {
   queues: [['queues'], ['tasks']],
   sprints: [['sprints'], ['planning'], ['burndown'], ['reports'], ['dashboard']],
   teams: [['teams']],
-  workflow: [['workflows'], ['fields'], ['permissions'], ['rules'], ['templates'], ['board']],
+  workflow: [
+    ['workflows'],
+    ['fields'],
+    ['permissions'],
+    ['rules'],
+    ['templates'],
+    ['board'],
+    ['taskTypes'],
+    ['resolutions'],
+  ],
   people: [['people'], ['teams']],
 }
 
@@ -231,6 +246,19 @@ export const usePermissions = (enabled = true) =>
 export const useRules = () =>
   useQuery({ queryKey: keys.rules, queryFn: () => api.get<AutomationRule[]>('/api/rules') })
 
+export const useTaskTypes = () =>
+  useQuery({ queryKey: keys.taskTypes, queryFn: () => api.get<TaskType[]>('/api/task-types') })
+
+export const useResolutions = () =>
+  useQuery({ queryKey: keys.resolutions, queryFn: () => api.get<Resolution[]>('/api/resolutions') })
+
+export const useChecklist = (key: string) =>
+  useQuery({
+    queryKey: keys.checklist(key),
+    queryFn: () => api.get<ChecklistItem[]>(`/api/tasks/${encodeURIComponent(key)}/checklist`),
+    enabled: Boolean(key),
+  })
+
 export const useTemplates = () =>
   useQuery({ queryKey: keys.templates, queryFn: () => api.get<TaskTemplate[]>('/api/templates') })
 
@@ -340,6 +368,8 @@ export const useMoveCard = () =>
       queue?: string
       sprint?: string
       assignee?: string
+      /** Причина закрытия — нужна при переносе в завершающую колонку. */
+      resolution?: string
     },
     { task: Task }
   >((body) => api.patch('/api/board/move', body), ['board', 'tasks', 'sprints'])

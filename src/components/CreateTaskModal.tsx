@@ -8,6 +8,7 @@ import {
   useProjects,
   useQueues,
   useSprints,
+  useTaskTypes,
   useTemplates,
 } from '../api/hooks'
 import { useSession } from '../store/session'
@@ -26,9 +27,11 @@ export function CreateTaskModal() {
   const projects = useProjects()
   const sprints = useSprints()
   const templates = useTemplates()
+  const taskTypes = useTaskTypes()
   const create = useCreateTask()
 
   const [queue, setQueue] = useState('')
+  const [type, setType] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [assignee, setAssignee] = useState('')
@@ -92,6 +95,7 @@ export function CreateTaskModal() {
         queue,
         description,
         priority: PRIORITY_KEY[priority],
+        type: type || null,
         assignee: assignee || null,
         project: project || null,
         sprint: sprint || null,
@@ -155,6 +159,19 @@ export function CreateTaskModal() {
                 ))}
               </select>
             </label>
+            <label className="label">
+              <span>Тип задачи</span>
+              <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
+                {(taskTypes.data ?? []).map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid-2">
             <label className="label">
               <span>Шаблон</span>
               <select

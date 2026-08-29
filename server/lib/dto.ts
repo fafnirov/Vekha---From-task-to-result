@@ -55,6 +55,8 @@ export function personDto(u: UserRow): PersonDto {
 
 const TASK_INCLUDE = {
   status: true,
+  type: true,
+  resolution: true,
   queue: { select: { key: true } },
   assignee: { select: { id: true, code: true } },
   author: { select: { id: true, code: true } },
@@ -78,6 +80,16 @@ export interface TaskDto {
   status: string
   statusId: string
   statusCategory: string
+  /** Тип задачи: имя, иконка и цвет для карточек и списков. */
+  type: string | null
+  typeId: string | null
+  typeIcon: string
+  typeColor: string
+  isEpic: boolean
+  /** Причина закрытия — заполнена только у завершённых задач. */
+  resolution: string | null
+  resolutionId: string | null
+  resolutionKind: string | null
   priority: string
   priorityKey: string
   who: string | null
@@ -116,6 +128,14 @@ export function taskDto(t: TaskRow, now = new Date()): TaskDto {
     status: t.status.name,
     statusId: t.statusId,
     statusCategory: t.status.category,
+    type: t.type?.name ?? null,
+    typeId: t.typeId,
+    typeIcon: t.type?.icon ?? 'task_alt',
+    typeColor: t.type?.color ?? 'var(--tx3)',
+    isEpic: t.type?.epic ?? false,
+    resolution: t.resolution?.name ?? null,
+    resolutionId: t.resolutionId,
+    resolutionKind: t.resolution?.kind ?? null,
     priority: PRIORITY_LABEL[t.priority as Priority] ?? 'Medium',
     priorityKey: t.priority,
     who: t.assignee?.code ?? null,

@@ -10,7 +10,9 @@ import {
   useInvites,
   usePermissions,
   useQueues,
+  useResolutions,
   useRules,
+  useTaskTypes,
   useTemplates,
   useWorkflows,
 } from '../api/hooks'
@@ -21,6 +23,7 @@ import type { AccessRole, Workflow as WorkflowType } from '../data/types'
 type TabId =
   | 'org'
   | 'workflow'
+  | 'types'
   | 'fields'
   | 'permissions'
   | 'rules'
@@ -31,6 +34,7 @@ type TabId =
 const TABS: { value: TabId; label: string }[] = [
   { value: 'org', label: 'Организация' },
   { value: 'workflow', label: 'Воркфлоу' },
+  { value: 'types', label: 'Типы и резолюции' },
   { value: 'fields', label: 'Поля' },
   { value: 'permissions', label: 'Права' },
   { value: 'rules', label: 'Автоматизации' },
@@ -73,6 +77,7 @@ export function Workflow() {
       <div style={{ marginTop: 12 }}>
         {tab === 'org' && <OrgTab manage={manage} />}
         {tab === 'workflow' && <WorkflowTab manage={manage} />}
+        {tab === 'types' && <TypesTab manage={manage} />}
         {tab === 'fields' && <FieldsTab manage={manage} />}
         {tab === 'permissions' && <PermissionsTab manage={manage} />}
         {tab === 'rules' && <RulesTab manage={manage} />}
@@ -503,6 +508,189 @@ function StatusDialog({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── Типы задач и резолюции ───────────────────────────────────────────── */
+
+const RESOLUTION_TONE: Record<string, { label: string; bg: string; fg: string }> = {
+  success: { label: 'успех', bg: 'var(--ok-bg)', fg: 'var(--ok)' },
+  neutral: { label: 'нейтрально', bg: 'var(--n-bg)', fg: 'var(--tx2)' },
+  rejected: { label: 'отказ', bg: 'var(--dang-bg)', fg: 'var(--dang)' },
+}
+
+function TypesTab({ manage }: { manage: boolean }) {
+  const types = useTaskTypes()
+  const resolutions = useResolutions()
+  const { toast, toastError } = useApp()
+
+  const [typeName, setTypeName] = useState('')
+  const [resName, setResName] = useState('')
+  const [resKind, setResKind] = useState('neutral')
+
+  const addType = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.post('/api/task-types', body),
+    ['workflow'],
+  )
+  const dropType = useApiMutation<string, unknown>(
+    (id) => api.del(`/api/task-types/${id}`),
+    ['workflow'],
+  )
+  const addRes = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.post('/api/resolutions', body),
+    ['workflow'],
+  )
+  const dropRes = useApiMutation<string, unknown>(
+    (id) => api.del(`/api/resolutions/${id}`),
+    ['workflow'],
+  )
+
+  return (
+    <div className="split" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))' }}>
+      <section className="card card--clip">
+        <div className="card__head">
+          <div className="card__title">Типы задач</div>
+          <span className="count-pill">{(types.data ?? []).length}</span>
+        </div>
+
+        <p className="report__hint" style={{ padding: '0 13px 10px' }}>
+          Тип отличает баг от улучшения в списках и на доске. Удалить можно
+          только тот, которым никто не пользуется.
+        </p>
+
+        {(types.data ?? []).map((t) => (
+          <div
+            key={t.id}
+            className="row row--static"
+            style={{ gridTemplateColumns: '26px minmax(0,1fr) 70px 30px', gap: 10 }}
+          >
+            <Icon name={t.icon} size={17} color={t.color} />
+            <span style={{ fontSize: 13 }}>
+              {t.name}
+              {t.epic && <span className="field__sys">эпик</span>}
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)', textAlign: 'right' }}>
+              {t.n}
+            </span>
+            {manage && !t.system ? (
+              <button
+                type="button"
+                className="btn btn--icon-quiet"
+                aria-label={`Удалить тип ${t.name}`}
+                onClick={() => void dropType.mutateAsync(t.id).catch(toastError)}
+              >
+                <Icon name="close" size={15} />
+              </button>
+            ) : (
+              <span />
+            )}
+          </div>
+        ))}
+
+        {manage && (
+          <div className="checkitem checkitem--add">
+            <Icon name="add" size={16} color="var(--tx3)" />
+            <input
+              className="input input--bare"
+              value={typeName}
+              onChange={(e) => setTypeName(e.target.value)}
+              placeholder="Новый тип и ↵"
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' || !typeName.trim()) return
+                e.preventDefault()
+                void addType
+                  .mutateAsync({ name: typeName.trim() })
+                  .then(() => {
+                    toast('Тип добавлен', typeName.trim(), 'ok')
+                    setTypeName('')
+                  })
+                  .catch(toastError)
+              }}
+            />
+          </div>
+        )}
+      </section>
+
+      <section className="card card--clip">
+        <div className="card__head">
+          <div className="card__title">Резолюции</div>
+          <span className="count-pill">{(resolutions.data ?? []).length}</span>
+        </div>
+
+        <p className="report__hint" style={{ padding: '0 13px 10px' }}>
+          Причина закрытия. Без неё «Done» не отличает решённую задачу от
+          отменённой, и отчёты приписывают команде чужую заслугу.
+        </p>
+
+        {(resolutions.data ?? []).map((r) => {
+          const tone = RESOLUTION_TONE[r.kind] ?? RESOLUTION_TONE.neutral
+          return (
+            <div
+              key={r.id}
+              className="row row--static"
+              style={{ gridTemplateColumns: 'minmax(0,1fr) 106px 60px 30px', gap: 10 }}
+            >
+              <span style={{ fontSize: 13 }}>{r.name}</span>
+              <span className="badge badge--sm" style={{ background: tone.bg, color: tone.fg }}>
+                {tone.label}
+              </span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)', textAlign: 'right' }}>
+                {r.n}
+              </span>
+              {manage && !r.system ? (
+                <button
+                  type="button"
+                  className="btn btn--icon-quiet"
+                  aria-label={`Удалить резолюцию ${r.name}`}
+                  onClick={() => void dropRes.mutateAsync(r.id).catch(toastError)}
+                >
+                  <Icon name="close" size={15} />
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          )
+        })}
+
+        {manage && (
+          <div className="checkitem checkitem--add" style={{ gap: 8 }}>
+            <Icon name="add" size={16} color="var(--tx3)" />
+            <input
+              className="input input--bare"
+              value={resName}
+              onChange={(e) => setResName(e.target.value)}
+              placeholder="Новая резолюция"
+            />
+            <select
+              className="select select--sm"
+              value={resKind}
+              onChange={(e) => setResKind(e.target.value)}
+            >
+              <option value="success">успех</option>
+              <option value="neutral">нейтрально</option>
+              <option value="rejected">отказ</option>
+            </select>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={!resName.trim()}
+              onClick={() =>
+                void addRes
+                  .mutateAsync({ name: resName.trim(), kind: resKind })
+                  .then(() => {
+                    toast('Резолюция добавлена', resName.trim(), 'ok')
+                    setResName('')
+                  })
+                  .catch(toastError)
+              }
+            >
+              Добавить
+            </button>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

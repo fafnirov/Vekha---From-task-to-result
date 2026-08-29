@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, PriorityChip, Tag } from '../components/ui'
 import { statusStyle } from '../data/catalog'
 import { useBoard, useMoveCard, useQueues, useSprints, useWorkflows } from '../api/hooks'
+import { ApiError } from '../api/client'
+import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
 import { useUi } from '../store/ui'
 import { useApp } from '../store/app'
 import { useSession } from '../store/session'
@@ -36,6 +38,13 @@ export function Board() {
   /* Ключ задачи, только что попавшей в «завершено» — подсветка на 700 мс. */
   const [justDone, setJustDone] = useState<string | null>(null)
   const [dragKey, setDragKey] = useState<string | null>(null)
+  /* Перенос в завершающую колонку требует причины закрытия. */
+  const [closing, setClosing] = useState<{
+    key: string
+    column: string
+    index: number | null
+    options: ResolutionOption[]
+  } | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
 
@@ -88,10 +97,10 @@ export function Board() {
     setOverIdx(null)
   }
 
-  async function drop(columnName: string) {
-    if (!dragKey) return
-    const key = dragKey
-    const index = overIdx
+  async function drop(columnName: string, resolution?: string) {
+    const key = closing?.key ?? dragKey
+    if (!key) return
+    const index = closing ? closing.index : overIdx
     endDrag()
 
     try {
@@ -102,7 +111,9 @@ export function Board() {
         queue: queue || undefined,
         sprint: sprint || undefined,
         assignee: assignee || undefined,
+        resolution,
       })
+      setClosing(null)
 
       // Закрытие задачи — единственный момент, где интерфейс себя поздравляет.
       const closed = result.task.statusCategory === 'done'
@@ -113,6 +124,17 @@ export function Board() {
 
       toast('Задача перенесена', `${key} → ${columnName}`, closed ? 'ok' : 'info')
     } catch (err) {
+      // Закрытие требует причины — сервер прислал варианты вместе с отказом.
+      if (err instanceof ApiError && err.status === 422) {
+        const payload = err.data as {
+          resolutionRequired?: boolean
+          resolutions?: ResolutionOption[]
+        }
+        if (payload?.resolutionRequired && payload.resolutions?.length) {
+          setClosing({ key, column: columnName, index, options: payload.resolutions })
+          return
+        }
+      }
       // Воркфлоу может запретить переход — сообщаем причину и не двигаем карточку.
       toastError(err, 'Перенос не выполнен')
     }
@@ -185,6 +207,17 @@ export function Board() {
           </button>
         </div>
       </div>
+
+      {closing && (
+        <ResolutionDialog
+          taskKey={closing.key}
+          status={closing.column}
+          options={closing.options}
+          busy={move.isPending}
+          onClose={() => setClosing(null)}
+          onPick={(resolution) => void drop(closing.column, resolution)}
+        />
+      )}
 
       <div className="board__scroll">
         {!board.isLoading && columns.length === 0 && (
@@ -315,6 +348,12 @@ export function Board() {
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <Icon
+                                name={t.typeIcon}
+                                size={14}
+                                color={t.typeColor}
+                                title={t.type ?? undefined}
+                              />
                               <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
                                 {t.key}
                               </span>

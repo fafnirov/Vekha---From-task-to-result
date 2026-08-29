@@ -24,6 +24,7 @@ import {
   type Role,
 } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
+import { shortDate } from '../lib/format.js'
 import { taskScope, canSeeQueue, visibleTask } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
@@ -51,6 +52,8 @@ const listQuery = z.object({
   project: z.string().optional(),
   sprint: z.string().optional(),
   tag: z.string().optional(),
+  type: z.string().optional(),
+  resolution: z.string().optional(),
   search: z.string().optional(),
   mine: z.coerce.boolean().optional(),
   watching: z.coerce.boolean().optional(),
@@ -76,6 +79,7 @@ const createBody = z.object({
   estimate: z.number().int().min(0).max(999).nullable().optional(),
   tags: z.array(z.string().trim().min(1)).default([]),
   parentKey: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
 })
 
 const patchBody = z.object({
@@ -89,7 +93,21 @@ const patchBody = z.object({
   dueDate: z.string().nullable().optional(),
   estimate: z.number().int().min(0).max(999).nullable().optional(),
   tags: z.array(z.string().trim().min(1)).optional(),
+  type: z.string().nullable().optional(),
+  /// Причина закрытия: обязательна при переходе в завершающий статус.
+  resolution: z.string().nullable().optional(),
 })
+
+/** Тип задачи по имени или идентификатору. */
+async function resolveType(ref: string | null | undefined) {
+  if (!ref) return null
+  return prisma.taskType.findFirst({ where: { OR: [{ id: ref }, { name: ref }] } })
+}
+
+async function resolveResolution(ref: string | null | undefined) {
+  if (!ref) return null
+  return prisma.resolution.findFirst({ where: { OR: [{ id: ref }, { name: ref }] } })
+}
 
 function toDate(value: string | null | undefined): Date | null | undefined {
   if (value === undefined) return undefined
@@ -150,6 +168,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (p.sprint) filters.push({ sprint: { name: { in: p.sprint.split(',') } } })
     if (p.tag) filters.push({ tags: { some: { tag: { name: { in: p.tag.split(',') } } } } })
     if (p.assignee) filters.push({ assignee: { code: { in: p.assignee.split(',') } } })
+    if (p.type) filters.push({ type: { name: { in: p.type.split(',') } } })
+    if (p.resolution) filters.push({ resolution: { name: { in: p.resolution.split(',') } } })
     if (p.mine) filters.push({ assigneeId: req.user!.id })
     if (p.unassigned) filters.push({ assigneeId: null })
     if (p.watching) filters.push({ watchers: { some: { userId: req.user!.id } } })
@@ -320,6 +340,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       return updated.counter
     })
 
+    const type =
+      (await resolveType(body.type)) ??
+      (await prisma.taskType.findFirst({ orderBy: { order: 'asc' } }))
+
     const created = await prisma.task.create({
       data: {
         key: `${queue.key}-${num}`,
@@ -328,6 +352,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         title: body.title,
         description: body.description,
         statusId: status.id,
+        typeId: type?.id ?? null,
         priority: body.priority,
         assigneeId,
         authorId: req.user!.id,
@@ -385,6 +410,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       where: { key: key.toUpperCase() },
       include: {
         status: true,
+        type: true,
+        resolution: true,
         queue: { include: { workflow: true } },
         assignee: { select: { name: true } },
         project: { select: { name: true } },
@@ -441,8 +468,43 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         })
       }
 
+      const closing = next.category === 'done'
+      const wasClosed = task.status.category === 'done'
+
+      if (closing) {
+        // Без резолюции «Done» не отличает решённую задачу от отменённой,
+        // и отчёты приписывают команде чужую заслугу.
+        const picked = (await resolveResolution(body.resolution)) ?? null
+        if (!picked && !task.resolutionId) {
+          const options = await prisma.resolution.findMany({ orderBy: { order: 'asc' } })
+          return reply.code(422).send({
+            error: 'Укажите причину закрытия',
+            resolutionRequired: true,
+            resolutions: options.map((r) => ({ id: r.id, name: r.name, kind: r.kind })),
+          })
+        }
+        if (picked) {
+          data.resolution = { connect: { id: picked.id } }
+          events.push({
+            kind: 'resolution',
+            field: 'resolution',
+            note: 'указал(а) причину закрытия',
+            to: picked.name,
+          })
+        }
+      } else if (wasClosed && task.resolutionId) {
+        // Задачу переоткрыли — прежняя причина закрытия больше не верна.
+        data.resolution = { disconnect: true }
+        events.push({
+          kind: 'resolution',
+          field: 'resolution',
+          note: 'снял(а) причину закрытия',
+          from: task.resolution?.name ?? '',
+        })
+      }
+
       data.status = { connect: { id: next.id } }
-      data.closedAt = next.category === 'done' ? new Date() : null
+      data.closedAt = closing ? new Date() : null
       events.push({
         kind: 'status',
         field: 'status',
@@ -460,6 +522,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (body.description !== undefined && body.description !== task.description) {
       data.description = body.description
       events.push({ kind: 'description', field: 'description', note: 'обновил(а) описание' })
+    }
+
+    if (body.type !== undefined) {
+      const nextType = await resolveType(body.type)
+      if ((nextType?.id ?? null) !== task.typeId) {
+        data.type = nextType ? { connect: { id: nextType.id } } : { disconnect: true }
+        events.push({
+          kind: 'type',
+          field: 'type',
+          note: 'изменил(а) тип задачи',
+          from: task.type?.name ?? '—',
+          to: nextType?.name ?? '—',
+        })
+      }
     }
 
     if (body.priority && body.priority !== task.priority) {
@@ -798,6 +874,189 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     })
     const now = new Date()
     return rows.map((a) => historyDto(a, now))
+  })
+
+  /* ── Чек-лист ─────────────────────────────────────────────────────── */
+
+  app.get('/api/tasks/:key/checklist', async (req, reply) => {
+    const { key } = req.params as { key: string }
+    const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
+    if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+
+    const items = await prisma.checklistItem.findMany({
+      where: { taskId: task.id },
+      include: { assignee: { select: { code: true, name: true } } },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    return items.map((i) => ({
+      id: i.id,
+      text: i.text,
+      done: i.done,
+      who: i.assignee?.code ?? null,
+      whoName: i.assignee?.name ?? null,
+      due: shortDate(i.dueDate),
+      dueDate: i.dueDate ? i.dueDate.toISOString() : null,
+      spawnedKey: i.spawnedKey,
+      order: i.order,
+    }))
+  })
+
+  app.post('/api/tasks/:key/checklist', async (req, reply) => {
+    const { key } = req.params as { key: string }
+    const schema = z.object({
+      text: z.string().trim().min(1, 'Пункт пуст').max(300),
+      assignee: z.string().nullable().optional(),
+      dueDate: z.string().nullable().optional(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0].message })
+    }
+
+    const task = await prisma.task.findFirst({
+      where: visibleTask(req.user!, key),
+      select: { id: true, authorId: true, assigneeId: true },
+    })
+    if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+    if (!(await canEditTask(req.user!, task))) {
+      return reply.code(403).send({ error: 'Можно править только свои задачи' })
+    }
+
+    const last = await prisma.checklistItem.findFirst({
+      where: { taskId: task.id },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    })
+
+    const item = await prisma.checklistItem.create({
+      data: {
+        taskId: task.id,
+        text: parsed.data.text,
+        assigneeId: (await resolveUser(parsed.data.assignee)) ?? null,
+        dueDate: toDate(parsed.data.dueDate) ?? null,
+        order: (last?.order ?? -1) + 1,
+      },
+    })
+
+    emitChanges(['tasks'], key)
+    return reply.code(201).send({ id: item.id })
+  })
+
+  app.patch('/api/checklist/:id', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const schema = z.object({
+      text: z.string().trim().min(1).max(300).optional(),
+      done: z.boolean().optional(),
+      assignee: z.string().nullable().optional(),
+      dueDate: z.string().nullable().optional(),
+      order: z.number().int().min(0).optional(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
+
+    const item = await prisma.checklistItem.findFirst({
+      where: { id, task: taskScope(req.user!) },
+      include: { task: { select: { key: true, authorId: true, assigneeId: true } } },
+    })
+    if (!item) return reply.code(404).send({ error: 'Пункт не найден' })
+    if (!(await canEditTask(req.user!, item.task))) {
+      return reply.code(403).send({ error: 'Можно править только свои задачи' })
+    }
+
+    await prisma.checklistItem.update({
+      where: { id },
+      data: {
+        ...(parsed.data.text !== undefined ? { text: parsed.data.text } : {}),
+        ...(parsed.data.done !== undefined ? { done: parsed.data.done } : {}),
+        ...(parsed.data.order !== undefined ? { order: parsed.data.order } : {}),
+        ...(parsed.data.assignee !== undefined
+          ? { assigneeId: (await resolveUser(parsed.data.assignee)) ?? null }
+          : {}),
+        ...(parsed.data.dueDate !== undefined ? { dueDate: toDate(parsed.data.dueDate) ?? null } : {}),
+      },
+    })
+
+    emitChanges(['tasks'], item.task.key)
+    return { ok: true }
+  })
+
+  app.delete('/api/checklist/:id', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const item = await prisma.checklistItem.findFirst({
+      where: { id, task: taskScope(req.user!) },
+      include: { task: { select: { key: true, authorId: true, assigneeId: true } } },
+    })
+    if (!item) return reply.code(404).send({ error: 'Пункт не найден' })
+    if (!(await canEditTask(req.user!, item.task))) {
+      return reply.code(403).send({ error: 'Можно править только свои задачи' })
+    }
+
+    await prisma.checklistItem.delete({ where: { id } })
+    emitChanges(['tasks'], item.task.key)
+    return { ok: true }
+  })
+
+  /**
+   * Превращение пункта в подзадачу: исполнитель и срок переносятся,
+   * пункт остаётся и ссылается на созданную задачу.
+   */
+  app.post('/api/checklist/:id/promote', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'task.create'))) return
+
+    const { id } = req.params as { id: string }
+    const item = await prisma.checklistItem.findFirst({
+      where: { id, task: taskScope(req.user!) },
+      include: { task: { include: { queue: { include: { workflow: { include: { statuses: { orderBy: { order: 'asc' } } } } } } } } },
+    })
+    if (!item) return reply.code(404).send({ error: 'Пункт не найден' })
+    if (item.spawnedKey) {
+      return reply.code(409).send({ error: `Пункт уже превращён в ${item.spawnedKey}` })
+    }
+
+    const queue = item.task.queue
+    const status = queue.workflow.statuses[0]
+    if (!status) return reply.code(400).send({ error: 'У воркфлоу очереди нет статусов' })
+
+    const num = await prisma.$transaction(async (tx) => {
+      const updated = await tx.queue.update({
+        where: { id: queue.id },
+        data: { counter: { increment: 1 } },
+        select: { counter: true },
+      })
+      return updated.counter
+    })
+
+    const type = await prisma.taskType.findFirst({ orderBy: { order: 'asc' } })
+
+    const created = await prisma.task.create({
+      data: {
+        key: `${queue.key}-${num}`,
+        num,
+        queueId: queue.id,
+        title: item.text,
+        statusId: status.id,
+        typeId: type?.id ?? null,
+        assigneeId: item.assigneeId,
+        authorId: req.user!.id,
+        projectId: item.task.projectId,
+        sprintId: item.task.sprintId,
+        parentId: item.task.id,
+        dueDate: item.dueDate,
+        rank: Date.now(),
+      },
+    })
+
+    await prisma.checklistItem.update({ where: { id }, data: { spawnedKey: created.key } })
+    await record({
+      taskId: item.task.id,
+      actorId: req.user!.id,
+      kind: 'created',
+      note: `превратил(а) пункт чек-листа в подзадачу ${created.key}`,
+    })
+
+    emitChanges(['tasks', 'board'], item.task.key)
+    return reply.code(201).send({ key: created.key })
   })
 
   /* ── Наблюдатели ──────────────────────────────────────────────────── */

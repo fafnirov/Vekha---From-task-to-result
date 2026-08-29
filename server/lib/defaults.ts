@@ -96,3 +96,27 @@ export const DEFAULT_TEMPLATES = [
     body: 'Регресс:\n\nМиграции:\n\nПлан отката:\n\nОповещения:',
   },
 ] as const
+
+/**
+ * Типы задач. В Яндекс Трекере тип определяет, как задача выглядит и
+ * какие резолюции ей доступны; здесь он задаёт иконку, цвет и признак эпика.
+ */
+export const DEFAULT_TASK_TYPES = [
+  { name: 'Задача', icon: 'task_alt', color: 'var(--info)', epic: false, system: true },
+  { name: 'Баг', icon: 'bug_report', color: 'var(--dang)', epic: false, system: true },
+  { name: 'Улучшение', icon: 'trending_up', color: 'var(--ok)', epic: false, system: true },
+  { name: 'Эпик', icon: 'bolt', color: 'var(--vio)', epic: true, system: true },
+]
+
+/**
+ * Резолюции — причина закрытия задачи. Без них «Done» не отличает
+ * решённую задачу от отменённой, и отчёты приписывают команде чужую заслугу.
+ */
+export const DEFAULT_RESOLUTIONS = [
+  { name: 'Решён', kind: 'success', system: true },
+  { name: 'Выполнено частично', kind: 'success', system: true },
+  { name: 'Дубликат', kind: 'neutral', system: true },
+  { name: 'Не воспроизводится', kind: 'neutral', system: true },
+  { name: 'Не актуально', kind: 'rejected', system: true },
+  { name: 'Отклонён', kind: 'rejected', system: true },
+]

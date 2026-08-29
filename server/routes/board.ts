@@ -93,6 +93,8 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       key: z.string(),
       column: z.string(),
       index: z.number().int().min(0).nullable().default(null),
+      /** Причина закрытия — нужна при переносе в завершающую колонку. */
+      resolution: z.string().nullable().optional(),
       /*
        * Фильтры доски приходят вместе с переносом: позицию нужно считать
        * по тому же набору карточек, который видит пользователь, иначе
@@ -124,6 +126,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
     const columnStatuses = parseStatuses(column.statuses)
     const alreadyHere = columnStatuses.includes(task.status.name)
 
+    let resolutionId: string | null = null
     let nextStatusId = task.statusId
     let nextStatusName = task.status.name
     let nextCategory = task.status.category
@@ -155,6 +158,25 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({
           error: `Переход ${task.status.name} → ${target.name} доступен роли «${ROLE_LABEL[transition.role as Role] ?? transition.role}» и выше`,
         })
+      }
+
+      // Та же проверка, что и на карточке: закрытие требует причины.
+      if (target.category === 'done' && !task.resolutionId) {
+        const picked = parsed.data.resolution
+          ? await prisma.resolution.findFirst({
+              where: { OR: [{ id: parsed.data.resolution }, { name: parsed.data.resolution }] },
+            })
+          : null
+
+        if (!picked) {
+          const options = await prisma.resolution.findMany({ orderBy: { order: 'asc' } })
+          return reply.code(422).send({
+            error: 'Укажите причину закрытия',
+            resolutionRequired: true,
+            resolutions: options.map((r) => ({ id: r.id, name: r.name, kind: r.kind })),
+          })
+        }
+        resolutionId = picked.id
       }
 
       nextStatusId = target.id
@@ -224,6 +246,9 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       where: { id: task.id },
       data: {
         statusId: nextStatusId,
+        ...(resolutionId ? { resolutionId } : {}),
+        // Переоткрытая задача теряет прежнюю причину закрытия.
+        ...(nextCategory !== 'done' && task.resolutionId ? { resolutionId: null } : {}),
         rank,
         closedAt: nextCategory === 'done' ? (task.closedAt ?? new Date()) : null,
       },

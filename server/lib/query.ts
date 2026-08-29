@@ -303,6 +303,13 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
       if (isEmptyToken(first)) return wrap({ sprintId: null })
       return wrap({ sprint: { name: { in: values } } })
 
+    case 'type':
+      return wrap({ type: { name: { in: values } } })
+
+    case 'resolution':
+      if (isEmptyToken(first)) return wrap({ resolutionId: null })
+      return wrap({ resolution: { name: { in: values } } })
+
     case 'tag':
     case 'tags':
       return wrap({ tags: { some: { tag: { name: { in: values } } } } })

@@ -54,6 +54,7 @@ model User {
   savedFilters   SavedFilter[]
   invitesCreated Invite[]       @relation("InviteAuthor")
   worklogs       Worklog[]
+  checklistItems ChecklistItem[]
 }
 
 model Invite {
@@ -213,6 +214,10 @@ model Task {
   title       String
   description String    @default("")
   statusId    String
+  /// Тип задачи: баг, улучшение, эпик и т. д.
+  typeId      String?
+  /// Причина закрытия. Заполняется при переходе в завершающий статус.
+  resolutionId String?
   /// critical | high | medium | low
   priority    String    @default("medium")
   assigneeId  String?
@@ -230,6 +235,9 @@ model Task {
 
   queue         Queue          @relation(fields: [queueId], references: [id], onDelete: Cascade)
   status        Status         @relation(fields: [statusId], references: [id])
+  type          TaskType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  resolution    Resolution?    @relation(fields: [resolutionId], references: [id], onDelete: SetNull)
+  checklist     ChecklistItem[]
   assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   author        User           @relation("TaskAuthor", fields: [authorId], references: [id])
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -251,6 +259,53 @@ model Task {
   @@index([assigneeId])
   @@index([sprintId])
   @@index([projectId])
+  @@index([typeId])
+}
+
+/// Тип задачи: баг, улучшение, эпик. Общий для всех очередей.
+model TaskType {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  icon    String  @default("task_alt")
+  /// Переменная дизайн-системы, например var(--dang).
+  color   String  @default("var(--tx2)")
+  /// Эпик группирует другие задачи и показывается иначе.
+  epic    Boolean @default(false)
+  order   Int     @default(0)
+  system  Boolean @default(false)
+
+  tasks Task[]
+}
+
+/// Причина закрытия: решён, дубликат, не воспроизводится.
+model Resolution {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  /// success | neutral | rejected — влияет на цвет и на отчёты.
+  kind    String  @default("neutral")
+  order   Int     @default(0)
+  system  Boolean @default(false)
+
+  tasks Task[]
+}
+
+/// Пункт чек-листа задачи.
+model ChecklistItem {
+  id         String    @id @default(cuid())
+  taskId     String
+  text       String
+  done       Boolean   @default(false)
+  assigneeId String?
+  dueDate    DateTime?
+  order      Int       @default(0)
+  /// Ключ задачи, в которую пункт был превращён.
+  spawnedKey String?
+  createdAt  DateTime  @default(now())
+
+  task     Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  assignee User? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
 }
 
 model Tag {

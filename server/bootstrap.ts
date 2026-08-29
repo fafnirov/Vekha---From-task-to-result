@@ -11,6 +11,8 @@ import { prisma } from './lib/prisma.js'
 import { DEFAULT_PERMISSIONS, PERMISSION_KEYS, ROLES } from './lib/constants.js'
 import {
   DEFAULT_BOARD_COLUMNS,
+  DEFAULT_RESOLUTIONS,
+  DEFAULT_TASK_TYPES,
   DEFAULT_FIELDS,
   DEFAULT_STATUSES,
   DEFAULT_TEMPLATES,
@@ -120,6 +122,45 @@ async function ensureTemplates(): Promise<number> {
   return DEFAULT_TEMPLATES.length
 }
 
+/** Типы задач и резолюции: добавляются только недостающие. */
+async function ensureTaskTypes(): Promise<number> {
+  const have = new Set((await prisma.taskType.findMany({ select: { name: true } })).map((t) => t.name))
+  const missing = DEFAULT_TASK_TYPES.filter((t) => !have.has(t.name)).map((t, i) => ({
+    ...t,
+    order: have.size + i,
+  }))
+  if (missing.length) await prisma.taskType.createMany({ data: missing })
+  return missing.length
+}
+
+async function ensureResolutions(): Promise<number> {
+  const have = new Set((await prisma.resolution.findMany({ select: { name: true } })).map((r) => r.name))
+  const missing = DEFAULT_RESOLUTIONS.filter((r) => !have.has(r.name)).map((r, i) => ({
+    ...r,
+    order: have.size + i,
+  }))
+  if (missing.length) await prisma.resolution.createMany({ data: missing })
+  return missing.length
+}
+
+/**
+ * Задачи, созданные до появления типов, остаются без типа. Проставляем
+ * им первый тип по порядку, чтобы списки и фильтры не имели пробелов.
+ */
+async function backfillTaskType(): Promise<number> {
+  const withoutType = await prisma.task.count({ where: { typeId: null } })
+  if (withoutType === 0) return 0
+
+  const fallback = await prisma.taskType.findFirst({ orderBy: { order: 'asc' } })
+  if (!fallback) return 0
+
+  const { count } = await prisma.task.updateMany({
+    where: { typeId: null },
+    data: { typeId: fallback.id },
+  })
+  return count
+}
+
 export async function bootstrap(): Promise<void> {
   const added: string[] = []
 
@@ -137,6 +178,15 @@ export async function bootstrap(): Promise<void> {
 
   const templates = await ensureTemplates()
   if (templates) added.push(`шаблоны (${templates})`)
+
+  const types = await ensureTaskTypes()
+  if (types) added.push(`типы задач (${types})`)
+
+  const resolutions = await ensureResolutions()
+  if (resolutions) added.push(`резолюции (${resolutions})`)
+
+  const typed = await backfillTaskType()
+  if (typed) added.push(`тип проставлен задачам (${typed})`)
 
   if (added.length) {
     console.log(`Создано недостающее: ${added.join(', ')}`)
