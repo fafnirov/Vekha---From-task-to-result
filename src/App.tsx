@@ -17,6 +17,7 @@ import { Teams } from './screens/Teams'
 import { Filters } from './screens/Filters'
 import { Reports } from './screens/Reports'
 import { Workflow } from './screens/Workflow'
+import { Profile } from './screens/Profile'
 import { useUi } from './store/ui'
 import { useSession } from './store/session'
 import { useApp } from './store/app'
@@ -61,6 +62,7 @@ export function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/workflow" element={<Workflow />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

@@ -149,12 +149,25 @@ export function Sidebar() {
                 className="menu__item"
                 onClick={() => {
                   setMenuOpen(false)
-                  navigate('/workflow?tab=people')
+                  navigate('/profile')
                 }}
               >
-                <Icon name="manage_accounts" size={17} color="var(--tx2)" />
-                <span style={{ flex: 1, fontSize: 13 }}>Участники и права</span>
+                <Icon name="account_circle" size={17} color="var(--tx2)" />
+                <span style={{ flex: 1, fontSize: 13 }}>Профиль и пароль</span>
               </button>
+              {can('people.manage') && (
+                <button
+                  type="button"
+                  className="menu__item"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    navigate('/workflow?tab=people')
+                  }}
+                >
+                  <Icon name="manage_accounts" size={17} color="var(--tx2)" />
+                  <span style={{ flex: 1, fontSize: 13 }}>Участники и права</span>
+                </button>
+              )}
               <button
                 type="button"
                 className="menu__item"

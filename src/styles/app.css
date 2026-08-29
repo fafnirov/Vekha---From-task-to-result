@@ -1598,3 +1598,21 @@
     background-image: none;
   }
 }
+
+/* ── Профиль ────────────────────────────────────────────────────────── */
+
+.profile {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+  align-items: start;
+  max-width: 900px;
+}
+
+.profile__id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
