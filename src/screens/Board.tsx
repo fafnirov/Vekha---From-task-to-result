@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, PriorityChip, Tag } from '../components/ui'
-import { statusStyle } from '../data/catalog'
+import { priorityStyle, statusStyle } from '../data/catalog'
 import { useBoard, useMoveCard, useQueues, useSprints, useWorkflows } from '../api/hooks'
 import { ApiError } from '../api/client'
 import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
@@ -10,12 +10,13 @@ import { useApp } from '../store/app'
 import { useSession } from '../store/session'
 
 const FOLD_KEY = 'vekha.board.folded'
+const GROUP_KEY = 'vekha.board.group'
 
 export function Board() {
   const nav = useNavigate()
   const ui = useUi()
   const { toast, toastError } = useApp()
-  const { can } = useSession()
+  const { can, list: people } = useSession()
   const [params, setParams] = useSearchParams()
 
   const queue = params.get('queue') ?? ''
@@ -38,6 +39,7 @@ export function Board() {
   /* Ключ задачи, только что попавшей в «завершено» — подсветка на 700 мс. */
   const [justDone, setJustDone] = useState<string | null>(null)
   const [dragKey, setDragKey] = useState<string | null>(null)
+  const [groupBy, setGroupBy] = useState(() => window.localStorage.getItem(GROUP_KEY) ?? 'none')
   /* Перенос в завершающую колонку требует причины закрытия. */
   const [closing, setClosing] = useState<{
     key: string
@@ -49,6 +51,67 @@ export function Board() {
   const [overIdx, setOverIdx] = useState<number | null>(null)
 
   const columns = board.data?.columns ?? []
+
+  /*
+   * Дорожки: горизонтальные группы карточек. Без них доска на сорок
+   * задач читается как сплошная стена — непонятно, кто чем занят.
+   * Группировка идёт по уже загруженным задачам, без запросов.
+   */
+  const lanes = useMemo(() => {
+    const tasks = board.data?.tasks ?? {}
+    const all = [{ id: 'all', label: '', size: 0, who: null as string | null, color: '', has: () => true }]
+    if (groupBy === 'none') return all
+
+    const buckets = new Map<
+      string,
+      { id: string; label: string; who: string | null; color: string; keys: Set<string> }
+    >()
+
+    for (const task of Object.values(tasks)) {
+      let id: string
+      let label: string
+      let who: string | null = null
+      let color = ''
+
+      if (groupBy === 'assignee') {
+        id = task.who ?? 'none'
+        label = task.who ? (people.find((p) => p.code === task.who)?.name ?? task.who) : 'Без исполнителя'
+        who = task.who
+      } else if (groupBy === 'priority') {
+        id = task.priorityKey
+        label = task.priority
+        color = priorityStyle(task.priority).fg
+      } else if (groupBy === 'type') {
+        id = task.typeId ?? 'none'
+        label = task.type ?? 'Без типа'
+        color = task.typeColor
+      } else {
+        id = task.projectId ?? 'none'
+        label = task.projectId ? task.project : 'Без проекта'
+      }
+
+      if (!buckets.has(id)) buckets.set(id, { id, label, who, color, keys: new Set() })
+      buckets.get(id)!.keys.add(task.key)
+    }
+
+    const order = ['critical', 'high', 'medium', 'low']
+    const list = [...buckets.values()].sort((a, b) => {
+      if (groupBy === 'priority') return order.indexOf(a.id) - order.indexOf(b.id)
+      // Группа «без …» всегда последняя: она не про людей и не про работу.
+      if (a.id === 'none') return 1
+      if (b.id === 'none') return -1
+      return a.label.localeCompare(b.label)
+    })
+
+    return list.map((l) => ({
+      id: l.id,
+      label: l.label,
+      who: l.who,
+      color: l.color,
+      size: l.keys.size,
+      has: (key: string) => l.keys.has(key),
+    }))
+  }, [board.data, groupBy, people])
 
   /*
    * Пока карточка в воздухе, показываем, какие колонки примут её по
@@ -191,6 +254,22 @@ export function Board() {
           </span>
         )}
 
+        <select
+          className="select select--sm"
+          value={groupBy}
+          title="Разбить доску на горизонтальные дорожки"
+          onChange={(e) => {
+            setGroupBy(e.target.value)
+            window.localStorage.setItem(GROUP_KEY, e.target.value)
+          }}
+        >
+          <option value="none">Без группировки</option>
+          <option value="assignee">По исполнителю</option>
+          <option value="priority">По приоритету</option>
+          <option value="type">По типу</option>
+          <option value="project">По проекту</option>
+        </select>
+
         <div className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {board.isFetching && <Icon name="progress_activity" size={16} color="var(--tx3)" />}
           <button type="button" className="btn btn--secondary" onClick={() => nav('/filters')}>
@@ -228,9 +307,20 @@ export function Board() {
           />
         )}
 
-        <div className={dragKey ? 'board__cols board--dragging' : 'board__cols'}>
-          {columns.map((col) => {
-            const keys = col.keys
+        {lanes.map((lane) => (
+          <div key={lane.id} className="lane">
+            {lane.id !== 'all' && (
+              <div className="lane__head">
+                {lane.who ? <Avatar id={lane.who} size="md" /> : null}
+                {lane.color && <span className="lane__dot" style={{ background: lane.color }} />}
+                <span className="lane__title">{lane.label}</span>
+                <span className="count-pill">{lane.size}</span>
+              </div>
+            )}
+
+            <div className={dragKey ? 'board__cols board--dragging' : 'board__cols'}>
+              {columns.map((col) => {
+                const keys = lane.id === 'all' ? col.keys : col.keys.filter((k) => lane.has(k))
             const isFolded = Boolean(folded[col.name])
             const over = overCol === col.name && Boolean(dragKey)
             const allowed = allowedColumns === null || allowedColumns.has(col.name)
@@ -423,8 +513,10 @@ export function Board() {
                 )}
               </div>
             )
-          })}
-        </div>
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

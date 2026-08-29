@@ -1753,3 +1753,48 @@
 .comment:focus-within .comment__tools {
   opacity: 1;
 }
+
+/* ── Дорожки на доске ───────────────────────────────────────────────── */
+
+.lane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lane + .lane {
+  margin-top: 14px;
+}
+
+.lane__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 7px;
+  position: sticky;
+  left: 0;
+  /* Заголовок дорожки не должен уезжать при горизонтальной прокрутке. */
+  width: max-content;
+}
+
+.lane__title {
+  font-size: 12px;
+  font-weight: var(--fw-med);
+  color: var(--tx2);
+}
+
+.lane__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+/* С дорожками колонки перестают тянуться на всю высоту. */
+.lane .board__cols {
+  height: auto;
+  align-items: flex-start;
+}
+
+.lane .bcol__body {
+  max-height: 46vh;
+}
