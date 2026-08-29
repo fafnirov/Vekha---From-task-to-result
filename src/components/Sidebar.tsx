@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './ui'
+import { Tooltip } from './Tooltip'
 import { NAV_ADMIN, NAV_MAIN, type NavItem } from '../lib/nav'
 import { useProjects, useQueues, useTasks } from '../api/hooks'
 import { useSession } from '../store/session'
@@ -67,15 +68,17 @@ export function Sidebar() {
         </div>
         {expanded && <div className="sidebar__name">Vekha</div>}
         {expanded && <div className="sidebar__ver">{org.version}</div>}
-        <button
-          type="button"
-          className="sidebar__collapse"
-          onClick={toggleNav}
-          style={{ marginLeft: expanded ? 0 : 'auto' }}
-          title={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-        >
-          <Icon name={navCollapsed ? 'left_panel_open' : 'left_panel_close'} size={17} />
-        </button>
+        <Tooltip label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'} side="right">
+          <button
+            type="button"
+            className="sidebar__collapse"
+            onClick={toggleNav}
+            style={{ marginLeft: expanded ? 0 : 'auto' }}
+            aria-label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          >
+            <Icon name={navCollapsed ? 'left_panel_open' : 'left_panel_close'} size={17} />
+          </button>
+        </Tooltip>
       </div>
 
       <button
@@ -132,9 +135,20 @@ export function Sidebar() {
             <span>{me?.role}</span>
           </button>
         )}
-        <button type="button" className="sidebar__tool" title="Сменить тему" onClick={toggleTheme}>
-          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={16} />
-        </button>
+        <Tooltip
+          label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+          hint="Выбор запоминается"
+          side="top"
+        >
+          <button
+            type="button"
+            className="sidebar__tool"
+            aria-label="Сменить тему"
+            onClick={toggleTheme}
+          >
+            <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={16} />
+          </button>
+        </Tooltip>
 
         {menuOpen && (
           <>

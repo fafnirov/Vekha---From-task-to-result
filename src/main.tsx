@@ -14,6 +14,7 @@ import './styles/components.css'
 import './styles/layout.css'
 import './styles/screens.css'
 import './styles/app.css'
+import './styles/polish.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

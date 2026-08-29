@@ -1,0 +1,537 @@
+/* ------------------------------------------------------------------
+   Слой отделки.
+
+   Подключается последним и меняет только внешний вид: скругления,
+   полупрозрачный «хром», мягкие тени, пружинное движение и подсказки.
+   Ни одного правила, влияющего на раскладку экранов, — плотность
+   таблицы и высота строки остаются прежними: это рабочий инструмент,
+   а не витрина.
+   ------------------------------------------------------------------ */
+
+:root {
+  /* Радиусы: одна лестница вместо разрозненных значений. */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-full: 999px;
+
+  /* Пружина: короткий перелёт через цель — движение выглядит живым. */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Полупрозрачный «хром» поверх фона. */
+  --glass: color-mix(in oklch, var(--surface) 72%, transparent);
+  --glass-strong: color-mix(in oklch, var(--surface) 86%, transparent);
+  --blur: saturate(180%) blur(20px);
+}
+
+[data-theme='dark'] {
+  --glass: color-mix(in oklch, var(--surface) 66%, transparent);
+  --glass-strong: color-mix(in oklch, var(--surface) 82%, transparent);
+}
+
+/* ── Оболочка ───────────────────────────────────────────────────────── */
+
+/* Сайдбар и шапка «плывут» над содержимым, а не приклеены к нему. */
+.sidebar {
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+.topbar {
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace {
+  /* Едва заметное свечение акцента сверху: полотно перестаёт быть плоским. */
+  background:
+    radial-gradient(1200px 420px at 18% -8%, color-mix(in oklch, var(--ac) 7%, transparent), transparent 70%),
+    var(--workspace);
+}
+
+/* ── Скругления и поверхности ───────────────────────────────────────── */
+
+.card {
+  border-radius: var(--r-md);
+}
+
+.modal {
+  border-radius: var(--r-lg);
+}
+
+.menu {
+  border-radius: var(--r-md);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+.btn,
+.input,
+.select,
+.textarea,
+.field {
+  border-radius: var(--r-sm);
+}
+
+.btn--lg {
+  border-radius: var(--r);
+}
+
+.bcard {
+  border-radius: var(--r);
+}
+
+.bcol {
+  border-radius: var(--r-md);
+}
+
+.badge,
+.tag,
+.chip,
+.count-pill,
+.pr {
+  border-radius: var(--r-full);
+}
+
+.av,
+.av--xs,
+.av--sm,
+.av--md,
+.av--lg {
+  border-radius: var(--r-full);
+}
+
+/* ── Кнопки ─────────────────────────────────────────────────────────── */
+
+.btn {
+  transition:
+    transform 120ms var(--spring),
+    background var(--t-fast) ease,
+    border-color var(--t-fast) ease,
+    box-shadow var(--t-fast) ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Акцентная кнопка получает лёгкий градиент — плоская заливка выглядит
+   дешевле при том же цвете. */
+.btn--primary {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--ac) 88%, white) 0%,
+    var(--ac) 100%
+  );
+}
+
+[data-theme='dark'] .btn--primary {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--ac) 88%, white) 0%,
+    var(--ac) 100%
+  );
+}
+
+.topbar__create {
+  border-radius: var(--r-sm);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--ac) 88%, white) 0%,
+    var(--ac) 100%
+  );
+  box-shadow: var(--sh-ac);
+  transition: transform 120ms var(--spring), box-shadow var(--t-fast) ease;
+}
+
+.topbar__create:active {
+  transform: scale(0.96);
+}
+
+/* ── Навигация ──────────────────────────────────────────────────────── */
+
+.nav__item {
+  border-radius: var(--r-sm);
+  transition:
+    background var(--t-fast) ease,
+    color var(--t-fast) ease,
+    transform 140ms var(--spring);
+}
+
+.nav__item:active {
+  transform: scale(0.985);
+}
+
+/* Маркер активного пункта вырастает, а не появляется рывком. */
+.nav__item--on::before {
+  animation: vk-marker 220ms var(--spring);
+}
+
+@keyframes vk-marker {
+  from {
+    transform: scaleY(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.org {
+  border-radius: var(--r);
+}
+
+/* ── Появление экрана и списков ─────────────────────────────────────── */
+
+.workspace > * {
+  animation: vk-screen 260ms var(--ease-out);
+}
+
+@keyframes vk-screen {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Лесенка появления строк: только первые пять и по 20 мс. Задержка
+ * держит строку невидимой до своего хода, поэтому длинная лесенка на
+ * медленной отрисовке читается как пустой список.
+ */
+.card--clip .row:nth-child(-n + 5),
+.att:nth-child(-n + 5),
+.bcard:nth-child(-n + 5) {
+  animation: vk-rise 260ms var(--ease-out) backwards;
+}
+
+.card--clip .row:nth-child(2),
+.att:nth-child(2),
+.bcard:nth-child(2) {
+  animation-delay: 20ms;
+}
+.card--clip .row:nth-child(3),
+.att:nth-child(3),
+.bcard:nth-child(3) {
+  animation-delay: 40ms;
+}
+.card--clip .row:nth-child(4),
+.att:nth-child(4),
+.bcard:nth-child(4) {
+  animation-delay: 60ms;
+}
+.card--clip .row:nth-child(5),
+.att:nth-child(5),
+.bcard:nth-child(5) {
+  animation-delay: 80ms;
+}
+
+@keyframes vk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Карточки ───────────────────────────────────────────────────────── */
+
+.kpi {
+  transition:
+    transform 200ms var(--spring),
+    box-shadow var(--t) ease,
+    border-color var(--t) ease;
+}
+
+.kpi:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sh2);
+  border-color: var(--border2);
+}
+
+.kpi__value {
+  font-size: var(--fs-2xl);
+  letter-spacing: -0.03em;
+}
+
+/* Карточка доски слегка подаётся к курсору — но без сдвига соседей. */
+.bcard {
+  transition:
+    box-shadow 180ms var(--ease),
+    border-color 180ms var(--ease),
+    transform 180ms var(--spring);
+}
+
+.bcard:hover {
+  transform: translateY(-1px) scale(1.006);
+}
+
+.bcard:active {
+  cursor: grabbing;
+}
+
+/* ── Типографика ────────────────────────────────────────────────────── */
+
+.page__title {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.025em;
+}
+
+.task__title {
+  font-size: 26px;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.card__title {
+  letter-spacing: -0.01em;
+}
+
+/* ── Модальные окна ─────────────────────────────────────────────────── */
+
+.modal {
+  animation: vk-modal-spring 300ms var(--spring);
+}
+
+@keyframes vk-modal-spring {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.scrim {
+  animation: vk-fade-in 200ms ease;
+}
+
+@keyframes vk-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Переключатели и чекбоксы ───────────────────────────────────────── */
+
+.toggle {
+  transition: background 200ms var(--ease), border-color 200ms var(--ease);
+}
+
+.toggle::after {
+  transition: transform 240ms var(--spring);
+}
+
+.cb {
+  transition:
+    background 160ms var(--ease),
+    border-color 160ms var(--ease),
+    transform 160ms var(--spring);
+}
+
+.cb:active {
+  transform: scale(0.88);
+}
+
+.cb--on .ic {
+  animation: vk-check 240ms var(--spring);
+}
+
+@keyframes vk-check {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── Подсказки ──────────────────────────────────────────────────────── */
+
+.tip-holder {
+  display: contents;
+}
+
+.tip {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklch, var(--tx) 92%, transparent);
+  color: var(--surface);
+  box-shadow: var(--sh3);
+  pointer-events: none;
+  animation: vk-tip 160ms var(--spring);
+}
+
+[data-theme='dark'] .tip {
+  background: color-mix(in oklch, var(--raised) 96%, white 4%);
+  color: var(--tx);
+  border: 1px solid var(--border2);
+}
+
+.tip__label {
+  font-size: 12px;
+  font-weight: var(--fw-med);
+  line-height: 1.35;
+}
+
+.tip__hint {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Стрелка рисуется поворотом квадрата — отдельного элемента не нужно. */
+.tip::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.tip--top {
+  transform: translate(-50%, -100%);
+}
+.tip--top::after {
+  bottom: -3px;
+  left: 50%;
+  margin-left: -3.5px;
+}
+
+.tip--bottom {
+  transform: translate(-50%, 0);
+}
+.tip--bottom::after {
+  top: -3px;
+  left: 50%;
+  margin-left: -3.5px;
+}
+
+.tip--left {
+  transform: translate(-100%, -50%);
+}
+.tip--left::after {
+  right: -3px;
+  top: 50%;
+  margin-top: -3.5px;
+}
+
+.tip--right {
+  transform: translate(0, -50%);
+}
+.tip--right::after {
+  left: -3px;
+  top: 50%;
+  margin-top: -3.5px;
+}
+
+@keyframes vk-tip {
+  from {
+    opacity: 0;
+    scale: 0.94;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* ── Прочее ─────────────────────────────────────────────────────────── */
+
+.searchbtn {
+  border-radius: var(--r-full);
+  transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
+}
+
+.searchbtn:hover {
+  border-color: var(--border3);
+  background: var(--surface);
+}
+
+.toast {
+  border-radius: var(--r-md);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+.skel {
+  border-radius: var(--r-xs);
+}
+
+/* Полоса прокрутки не должна выглядеть системной деталью из 2005 года. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background-clip: content-box;
+  background-color: var(--border2);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border3);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Уважение к настройке «меньше движения» ─────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace > *,
+  .card--clip .row,
+  .att,
+  .bcard,
+  .modal,
+  .tip,
+  .nav__item--on::before,
+  .cb--on .ic {
+    animation: none !important;
+  }
+
+  .btn:active:not(:disabled),
+  .kpi:hover,
+  .bcard:hover,
+  .nav__item:active,
+  .cb:active {
+    transform: none !important;
+  }
+}

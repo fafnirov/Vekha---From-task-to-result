@@ -13,6 +13,7 @@ import {
 } from '../components/ui'
 import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, fileSize } from '../data/catalog'
 import { Checklist } from '../components/Checklist'
+import { Tooltip } from '../components/Tooltip'
 import { Worklog } from '../components/Worklog'
 import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
 import { api, ApiError } from '../api/client'
@@ -201,6 +202,10 @@ export function TaskDetail() {
             </Link>
           )}
           <span className="spacer" style={{ display: 'flex', gap: 6 }}>
+            <Tooltip
+              label={watching ? 'Вы получаете уведомления' : 'Получать уведомления'}
+              hint="Изменения статуса, комментарии, связи"
+            >
             <button
               type="button"
               className={watching ? 'btn btn--secondary btn--on' : 'btn btn--secondary'}
@@ -214,6 +219,7 @@ export function TaskDetail() {
               <Icon name={watching ? 'visibility' : 'visibility_off'} size={16} />
               {watching ? 'Наблюдаю' : 'Наблюдать'}
             </button>
+            </Tooltip>
             {can('task.delete') && (
               <button
                 type="button"

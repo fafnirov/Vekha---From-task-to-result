@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar, Icon } from './ui'
+import { Tooltip } from './Tooltip'
 import { CRUMBS } from '../lib/nav'
 import { api } from '../api/client'
 import { useInvalidate, useNotifications } from '../api/hooks'
@@ -84,14 +85,16 @@ export function TopBar() {
 
   return (
     <header className="topbar">
-      <button
-        type="button"
-        className="topbar__burger"
-        onClick={toggleMobileNav}
-        aria-label="Меню"
-      >
-        <Icon name="menu" size={19} />
-      </button>
+      <Tooltip label="Разделы" side="bottom">
+          <button
+            type="button"
+            className="topbar__burger"
+            onClick={toggleMobileNav}
+            aria-label="Меню"
+          >
+            <Icon name="menu" size={19} />
+          </button>
+        </Tooltip>
 
       <nav className="crumbs" aria-label="Хлебные крошки">
         {crumbs.map((c, i) => (
@@ -117,27 +120,30 @@ export function TopBar() {
         </button>
 
         <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="topbar__btn"
-            title="Уведомления"
-            onClick={ui.toggleNotif}
+          <Tooltip
+            label="Уведомления"
+            hint={unread > 0 ? `${unread} непрочитанных` : 'Всё прочитано'}
+            side="bottom"
           >
-            <Icon name="notifications" size={17} />
-          </button>
+            <button type="button" className="topbar__btn" onClick={ui.toggleNotif}>
+              <Icon name="notifications" size={17} />
+            </button>
+          </Tooltip>
           {unread > 0 && <span className="dot-badge" />}
         </div>
 
-        <button
-          type="button"
-          className="topbar__btn"
-          title="Помощь"
-          onClick={() =>
-            toast('Горячие клавиши', '⌘K — поиск, C — создать, Esc — закрыть', 'info')
-          }
-        >
-          <Icon name="help" size={17} />
-        </button>
+        <Tooltip label="Горячие клавиши" hint="⌘K — поиск, C — создать, Esc — закрыть" side="bottom">
+          <button
+            type="button"
+            className="topbar__btn"
+            aria-label="Помощь"
+            onClick={() =>
+              toast('Горячие клавиши', '⌘K — поиск, C — создать, Esc — закрыть', 'info')
+            }
+          >
+            <Icon name="help" size={17} />
+          </button>
+        </Tooltip>
       </div>
 
       {ui.createOpen && (
