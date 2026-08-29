@@ -163,6 +163,8 @@ export function queueDto(q: QueueRow) {
     owner: q.owner.code,
     ownerId: q.ownerId,
     n: q._count.tasks,
+    // Счётчик нумерации, а не количество задач: после удалений они расходятся.
+    counter: q.counter,
     wf: q.workflow.name,
     workflowId: q.workflowId,
     access: ACCESS_LABEL[q.access] ?? q.access,

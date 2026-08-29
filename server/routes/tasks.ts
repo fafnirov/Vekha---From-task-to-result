@@ -9,13 +9,20 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, can, canEditTask, require as requirePerm } from '../lib/auth.js'
+import { atLeast, authenticate, can, canEditTask, require as requirePerm } from '../lib/auth.js'
 import { commentDto, historyDto, taskDto, taskInclude, linkLabel } from '../lib/dto.js'
 import { findMentions, notify, record, taskAudience, watch } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
 import { runRules } from '../lib/automation.js'
 import { parseQuery, QueryError } from '../lib/query.js'
-import { PRIORITIES, PRIORITY_LABEL, LINK_TYPES, type Priority } from '../lib/constants.js'
+import {
+  PRIORITIES,
+  PRIORITY_LABEL,
+  LINK_TYPES,
+  ROLE_LABEL,
+  type Priority,
+  type Role,
+} from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
 import { taskScope, canSeeQueue, visibleTask } from '../lib/access.js'
 
@@ -424,9 +431,14 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           .code(422)
           .send({ error: `Переход ${task.status.name} → ${next.name} не разрешён воркфлоу` })
       }
-      if (!(await can(req.user!.role, 'workflow.manage'))) {
-        const allowed = await can(req.user!.role, 'task.status')
-        if (!allowed) return reply.code(403).send({ error: 'Недостаточно прав для перехода' })
+      // Роль перехода из настроек воркфлоу: раньше она только отображалась.
+      if (
+        !atLeast(req.user!.role, transition.role as Role) &&
+        !(await can(req.user!.role, 'workflow.manage'))
+      ) {
+        return reply.code(403).send({
+          error: `Переход ${task.status.name} → ${next.name} доступен роли «${ROLE_LABEL[transition.role as Role] ?? transition.role}» и выше`,
+        })
       }
 
       data.status = { connect: { id: next.id } }

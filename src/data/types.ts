@@ -130,6 +130,8 @@ export interface Queue {
   owner: PersonId
   ownerId: string
   n: number
+  /** Счётчик нумерации: следующая задача получит номер counter + 1. */
+  counter: number
   wf: string
   workflowId: string
   access: string

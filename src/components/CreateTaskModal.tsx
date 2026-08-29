@@ -48,7 +48,7 @@ export function CreateTaskModal() {
   }, [queue, queues.data])
 
   const currentQueue = queues.data?.find((q) => q.key === queue)
-  const nextKey = currentQueue ? `${currentQueue.key}-${currentQueue.n + 1}` : '—'
+  const nextKey = currentQueue ? `${currentQueue.key}-${currentQueue.counter + 1}` : '—'
 
   /* Проекты и спринты сужаются до выбранной очереди — иначе список бессмыслен. */
   const queueProjects = useMemo(

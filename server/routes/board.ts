@@ -3,11 +3,12 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, require as requirePerm } from '../lib/auth.js'
+import { atLeast, authenticate, can, require as requirePerm } from '../lib/auth.js'
 import { taskDto, taskInclude } from '../lib/dto.js'
 import { record, notify, taskAudience } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
 import { runRules } from '../lib/automation.js'
+import { ROLE_LABEL, type Role } from '../lib/constants.js'
 import { canSeeQueue, taskScope } from '../lib/access.js'
 
 function parseStatuses(raw: string): string[] {
@@ -145,6 +146,15 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(422)
           .send({ error: `Переход ${task.status.name} → ${target.name} не разрешён воркфлоу` })
+      }
+      // Та же проверка роли, что и на карточке задачи.
+      if (
+        !atLeast(req.user!.role, transition.role as Role) &&
+        !(await can(req.user!.role, 'workflow.manage'))
+      ) {
+        return reply.code(403).send({
+          error: `Переход ${task.status.name} → ${target.name} доступен роли «${ROLE_LABEL[transition.role as Role] ?? transition.role}» и выше`,
+        })
       }
 
       nextStatusId = target.id
