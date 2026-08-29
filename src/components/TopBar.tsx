@@ -29,7 +29,7 @@ export function TopBar() {
   const nav = useNavigate()
   const ui = useUi()
   const { org, can } = useSession()
-  const { toast, toastError } = useApp()
+  const { toast, toastError, toggleMobileNav } = useApp()
   const crumbs = useCrumbs(org.name)
   const invalidate = useInvalidate()
 
@@ -84,6 +84,15 @@ export function TopBar() {
 
   return (
     <header className="topbar">
+      <button
+        type="button"
+        className="topbar__burger"
+        onClick={toggleMobileNav}
+        aria-label="Меню"
+      >
+        <Icon name="menu" size={19} />
+      </button>
+
       <nav className="crumbs" aria-label="Хлебные крошки">
         {crumbs.map((c, i) => (
           <span key={`${c.label}-${i}`} style={{ display: 'contents' }}>

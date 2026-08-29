@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { priorityStyle, statusStyle } from '../../data/catalog'
 import { usePerson } from '../../store/session'
@@ -128,8 +129,37 @@ export function PriorityChip({
   )
 }
 
+/**
+ * Ключ задачи. Самая копируемая строка в трекере — её несут в чат,
+ * в коммит и в созвон, поэтому клик копирует её в буфер.
+ */
 export function TaskKey({ children }: { children: ReactNode }) {
-  return <span className="key">{children}</span>
+  const [copied, setCopied] = useState(false)
+  const value = String(children ?? '')
+
+  async function copy(e: React.MouseEvent) {
+    // Ключ живёт внутри кликабельной строки — переход открыл бы задачу.
+    e.stopPropagation()
+    e.preventDefault()
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 900)
+    } catch {
+      /* Буфер может быть недоступен — тогда просто ничего не происходит. */
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className={copied ? 'key key--copied' : 'key'}
+      onClick={(e) => void copy(e)}
+      title={copied ? 'Скопировано' : `Скопировать ${value}`}
+    >
+      {copied ? 'скопировано' : children}
+    </button>
+  )
 }
 
 export function Tag({

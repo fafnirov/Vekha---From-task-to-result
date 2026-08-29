@@ -1391,3 +1391,210 @@
   position: absolute;
   inset: -5px;
 }
+
+/* ── Ключ задачи копируется по клику ────────────────────────────────── */
+
+.key {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+
+.key:hover {
+  background: var(--ac-soft2);
+  text-decoration: underline dotted;
+}
+
+.key--copied {
+  background: var(--ok-bg);
+  color: var(--ok);
+  text-decoration: none;
+}
+
+/* ── Доска: подсказка правил при перетаскивании ─────────────────────── */
+
+.bcol {
+  transition:
+    opacity var(--t) var(--ease),
+    box-shadow var(--t) var(--ease),
+    background var(--t) var(--ease);
+}
+
+/* Куда переход запрещён воркфлоу — гаснет. */
+.board--dragging .bcol--forbidden {
+  opacity: 0.38;
+  border-color: transparent;
+}
+
+.board--dragging .bcol--allowed {
+  box-shadow: inset 0 0 0 1.5px var(--ac-soft2);
+}
+
+.bcol--over {
+  background: var(--ac-soft) !important;
+  box-shadow: inset 0 0 0 1.5px var(--ac);
+}
+
+/* Превышенный лимит WIP виден в шапке колонки, а не только цифрой. */
+.bcol--wip .bcol__head {
+  box-shadow: inset 0 2px 0 var(--warn);
+}
+
+/* ── Узкие экраны ───────────────────────────────────────────────────── */
+
+/* Бургер нужен только там, где сайдбар уезжает за край. */
+.topbar__burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--tx2);
+  cursor: pointer;
+  flex: none;
+}
+
+.topbar__burger:hover {
+  border-color: var(--border3);
+  color: var(--tx);
+}
+
+.shell__scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  /* Сайдбар занимал две трети экрана и выталкивал контент вбок —
+     на узком экране он становится выдвижной панелью. */
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 90;
+    width: 264px;
+    transform: translateX(-100%);
+    transition: transform var(--t) var(--ease);
+    box-shadow: var(--sh3);
+  }
+
+  .sidebar--open {
+    transform: none;
+  }
+
+  .shell__scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 85;
+    background: oklch(0.2 0.02 268 / 0.5);
+  }
+
+  .topbar__burger {
+    display: flex;
+  }
+
+  /* В шапке остаётся только поиск-иконка и создание. */
+  .topbar {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .searchbtn span:not(.kbd) {
+    display: none;
+  }
+
+  .searchbtn {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .searchbtn .kbd {
+    display: none;
+  }
+
+  .crumbs {
+    overflow: hidden;
+  }
+
+  .topbar__create span,
+  .topbar__create {
+    font-size: var(--fs-xs);
+  }
+
+  .page {
+    padding: 12px;
+  }
+
+  .home__kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tasks__views,
+  .tasks__filters,
+  .board__bar {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .home__kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cards-grid,
+  .cards-grid--sm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Подпись организации в крошках съедает всю ширину. */
+  .crumbs > span:first-child {
+    display: none;
+  }
+
+  .modal {
+    width: calc(100vw - 20px) !important;
+  }
+}
+
+/* ── Момент закрытия задачи ─────────────────────────────────────────── */
+
+@keyframes vk-settle {
+  from {
+    background-position: -120% 0;
+  }
+  to {
+    background-position: 220% 0;
+  }
+}
+
+/* По карточке один раз проходит зелёная волна и остаётся метка слева. */
+.bcard--just-done {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    var(--ok-bg) 45%,
+    var(--ok-bg) 55%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: vk-settle 560ms var(--ease-out);
+  box-shadow: inset 2px 0 0 var(--ok), var(--sh1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bcard--just-done {
+    animation: none;
+    background-image: none;
+  }
+}

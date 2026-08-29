@@ -35,8 +35,12 @@ function initialNav(): boolean {
 interface AppApi {
   theme: Theme
   navCollapsed: boolean
+  /** Выдвижная навигация на узком экране — там сайдбар не помещается. */
+  mobileNav: boolean
   toggleTheme: () => void
   toggleNav: () => void
+  toggleMobileNav: () => void
+  closeMobileNav: () => void
   toasts: ToastItem[]
   toast: (title: string, text: string, kind?: ToastKind) => void
   /** Показать ошибку из ответа API одной строкой. */
@@ -49,6 +53,7 @@ const Ctx = createContext<AppApi | null>(null)
 export function AppProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(initialTheme)
   const [navCollapsed, setNavCollapsed] = useState<boolean>(initialNav)
+  const [mobileNav, setMobileNav] = useState(false)
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const nextId = useRef(1)
 
@@ -87,14 +92,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       theme,
       navCollapsed,
+      mobileNav,
       toggleTheme: () => setTheme((t) => (t === 'light' ? 'dark' : 'light')),
       toggleNav: () => setNavCollapsed((v) => !v),
+      toggleMobileNav: () => setMobileNav((v) => !v),
+      closeMobileNav: () => setMobileNav(false),
       toasts,
       toast,
       toastError,
       dismissToast,
     }),
-    [theme, navCollapsed, toasts, toast, toastError, dismissToast],
+    [theme, navCollapsed, mobileNav, toasts, toast, toastError, dismissToast],
   )
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>

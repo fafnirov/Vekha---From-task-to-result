@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, PriorityChip, Tag } from '../components/ui'
 import { statusStyle } from '../data/catalog'
-import { useBoard, useMoveCard, useQueues, useSprints } from '../api/hooks'
+import { useBoard, useMoveCard, useQueues, useSprints, useWorkflows } from '../api/hooks'
 import { useUi } from '../store/ui'
 import { useApp } from '../store/app'
 import { useSession } from '../store/session'
@@ -22,6 +22,7 @@ export function Board() {
 
   const queues = useQueues()
   const sprints = useSprints()
+  const workflows = useWorkflows()
   const board = useBoard({ queue: queue || undefined, sprint: sprint || undefined, assignee: assignee || undefined })
   const move = useMoveCard()
 
@@ -32,11 +33,40 @@ export function Board() {
       return {}
     }
   })
+  /* Ключ задачи, только что попавшей в «завершено» — подсветка на 700 мс. */
+  const [justDone, setJustDone] = useState<string | null>(null)
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
 
   const columns = board.data?.columns ?? []
+
+  /*
+   * Пока карточка в воздухе, показываем, какие колонки примут её по
+   * воркфлоу. Раньше правила узнавались только методом проб: перенёс —
+   * получил отказ. Считается на клиенте из уже загруженных данных.
+   */
+  const allowedColumns = useMemo(() => {
+    if (!dragKey) return null
+    const task = board.data?.tasks[dragKey]
+    if (!task) return null
+
+    const queueRow = queues.data?.find((q) => q.key === task.queue)
+    const wf = workflows.data?.find((w) => w.id === queueRow?.workflowId)
+    if (!wf) return null
+
+    const reachable = new Set(
+      wf.transitions.filter((t) => t.from === task.status).map((t) => t.to),
+    )
+    // Колонка, где карточка уже лежит, всегда доступна: это смена порядка.
+    reachable.add(task.status)
+
+    return new Set(
+      (board.data?.columns ?? [])
+        .filter((c) => c.statuses.some((st) => reachable.has(st)))
+        .map((c) => c.name),
+    )
+  }, [dragKey, board.data, queues.data, workflows.data])
   const tasks = board.data?.tasks ?? {}
 
   /* Аватары в шапке — те, у кого есть карточки на этой доске. */
@@ -65,7 +95,7 @@ export function Board() {
     endDrag()
 
     try {
-      await move.mutateAsync({
+      const result = await move.mutateAsync({
         key,
         column: columnName,
         index,
@@ -73,7 +103,15 @@ export function Board() {
         sprint: sprint || undefined,
         assignee: assignee || undefined,
       })
-      toast('Задача перенесена', `${key} → ${columnName}`, columnName === 'Done' ? 'ok' : 'info')
+
+      // Закрытие задачи — единственный момент, где интерфейс себя поздравляет.
+      const closed = result.task.statusCategory === 'done'
+      if (closed) {
+        setJustDone(key)
+        window.setTimeout(() => setJustDone((k) => (k === key ? null : k)), 700)
+      }
+
+      toast('Задача перенесена', `${key} → ${columnName}`, closed ? 'ok' : 'info')
     } catch (err) {
       // Воркфлоу может запретить переход — сообщаем причину и не двигаем карточку.
       toastError(err, 'Перенос не выполнен')
@@ -157,23 +195,26 @@ export function Board() {
           />
         )}
 
-        <div className="board__cols">
+        <div className={dragKey ? 'board__cols board--dragging' : 'board__cols'}>
           {columns.map((col) => {
             const keys = col.keys
             const isFolded = Boolean(folded[col.name])
             const over = overCol === col.name && Boolean(dragKey)
+            const allowed = allowedColumns === null || allowedColumns.has(col.name)
             const exceeded = col.wipLimit > 0 && keys.length > col.wipLimit
             const dot = statusStyle(col.statuses[0] ?? '').dot
 
             return (
               <div
                 key={col.id}
-                className="bcol"
-                style={{
-                  width: isFolded ? 52 : 278,
-                  background: over ? 'var(--ac-soft)' : 'var(--surface2)',
-                  borderColor: over ? 'var(--ac)' : 'var(--border)',
-                }}
+                className={[
+                  'bcol',
+                  over && 'bcol--over',
+                  dragKey && (allowed ? 'bcol--allowed' : 'bcol--forbidden'),
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={{ width: isFolded ? 52 : 278 }}
                 onDragOver={(e) => {
                   e.preventDefault()
                   if (overCol !== col.name) {
@@ -251,7 +292,7 @@ export function Board() {
                         <div key={k} style={{ display: 'contents' }}>
                           {showLine && <div className="drop-line" />}
                           <article
-                            className="bcard"
+                            className={justDone === k ? 'bcard bcard--just-done' : 'bcard'}
                             draggable={can('task.status')}
                             onDragStart={(e) => {
                               e.dataTransfer.effectAllowed = 'move'

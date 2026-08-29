@@ -19,9 +19,11 @@ import { Reports } from './screens/Reports'
 import { Workflow } from './screens/Workflow'
 import { useUi } from './store/ui'
 import { useSession } from './store/session'
+import { useApp } from './store/app'
 
 export function App() {
   const ui = useUi()
+  const { mobileNav, closeMobileNav } = useApp()
   const { me, ready } = useSession()
 
   // Пока проверяется сессия, экран остаётся пустым: мигание формой входа
@@ -41,6 +43,7 @@ export function App() {
 
   return (
     <div className="shell">
+      {mobileNav && <div className="shell__scrim" onClick={closeMobileNav} />}
       <Sidebar />
       <div className="main-col">
         <TopBar />

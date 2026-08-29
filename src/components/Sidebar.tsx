@@ -12,7 +12,8 @@ function isActive(item: NavItem, pathname: string): boolean {
 }
 
 export function Sidebar() {
-  const { navCollapsed, toggleNav, theme, toggleTheme, toast, toastError } = useApp()
+  const { navCollapsed, toggleNav, theme, toggleTheme, toast, toastError, mobileNav, closeMobileNav } =
+    useApp()
   const { me, org, logout, can } = useSession()
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -40,6 +41,7 @@ export function Sidebar() {
         to={item.to}
         className={on ? 'nav__item nav__item--on' : 'nav__item'}
         title={navCollapsed ? item.label : undefined}
+        onClick={closeMobileNav}
       >
         <Icon name={item.icon} size={17} />
         {expanded && <span className="nav__label">{item.label}</span>}
@@ -58,7 +60,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={mobileNav ? 'sidebar sidebar--open' : 'sidebar'}>
       <div className="sidebar__brand">
         <div className="sidebar__mark">
           <i />
