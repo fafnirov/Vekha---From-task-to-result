@@ -104,10 +104,10 @@ export function Reports() {
             {(data?.workload ?? []).map((w) => (
               <div key={w.id} className="workload">
                 <Avatar id={w.code} size="md" />
-                <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                <span className="ellipsis" style={{ fontSize: 13 }}>
                   {w.name}
                 </span>
-                <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--tx2)' }}>
                   {w.sp} SP
                 </span>
                 <span className="workload__bar">
@@ -144,7 +144,7 @@ export function Reports() {
                 <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
                   {s.fact}/{s.plan} SP
                 </span>
-                <span className="mono" style={{ fontSize: 11.5, color: s.fg, width: 40, textAlign: 'right' }}>
+                <span className="mono" style={{ fontSize: 12, color: s.fg, width: 40, textAlign: 'right' }}>
                   {s.pct}
                 </span>
                 <Progress
@@ -177,7 +177,7 @@ export function Reports() {
                 <span className="ellipsis" style={{ fontSize: 12 }}>
                   {o.title}
                 </span>
-                <span className="mono" style={{ fontSize: 11.5, color: 'var(--dang)', textAlign: 'right' }}>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--dang)', textAlign: 'right' }}>
                   {o.late}
                 </span>
               </div>

@@ -158,7 +158,7 @@ export function ProjectDetail() {
                   <span className="tl__line" />
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <b style={{ fontSize: 12.5 }}>{m.title}</b>
+                      <b style={{ fontSize: 13 }}>{m.title}</b>
                       <span className="badge badge--sm" style={{ background: m.bg, color: m.fg }}>
                         {m.state}
                       </span>
@@ -178,7 +178,7 @@ export function ProjectDetail() {
                         </button>
                       )}
                     </span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--tx2)', marginTop: 2 }}>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--tx2)', marginTop: 2 }}>
                       {m.note}
                     </span>
                     <span className="tl__meta" style={{ color: m.dateFg }}>
@@ -208,7 +208,7 @@ export function ProjectDetail() {
                       <Icon name={tone.icon} size={15} />
                     </span>
                     <span style={{ minWidth: 0 }}>
-                      <b style={{ fontSize: 12.5, display: 'block' }}>{r.title}</b>
+                      <b style={{ fontSize: 13, display: 'block' }}>{r.title}</b>
                       <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
                         {r.note}
                       </span>
@@ -223,7 +223,7 @@ export function ProjectDetail() {
                 <div className="card__title" style={{ marginBottom: 8 }}>
                   О проекте
                 </div>
-                <p className="pretty" style={{ fontSize: 12.5, color: 'var(--tx2)', margin: 0 }}>
+                <p className="pretty" style={{ fontSize: 13, color: 'var(--tx2)', margin: 0 }}>
                   {project.description}
                 </p>
               </section>
@@ -246,16 +246,16 @@ export function ProjectDetail() {
               onClick={() => nav(`/tasks/${t.key}`)}
             >
               <TaskKey>{t.key}</TaskKey>
-              <span className="ellipsis" style={{ fontSize: 12.5 }}>
+              <span className="ellipsis" style={{ fontSize: 13 }}>
                 {t.title}
               </span>
               <StatusBadge status={t.status} category={t.statusCategory} />
               <PriorityChip priority={t.priority} small />
               <Avatar id={t.who} size="md" />
-              <span className="mono" style={{ fontSize: 11.5, color: dueColor(t.dueState) }}>
+              <span className="mono" style={{ fontSize: 12, color: dueColor(t.dueState) }}>
                 {t.due}
               </span>
-              <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', textAlign: 'right' }}>
+              <span className="mono" style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'right' }}>
                 {t.est || '—'}
               </span>
             </div>

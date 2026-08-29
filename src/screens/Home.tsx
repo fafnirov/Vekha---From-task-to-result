@@ -115,7 +115,7 @@ export function Home() {
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                       <TaskKey>{row.key}</TaskKey>
-                      <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                      <span className="ellipsis" style={{ fontSize: 13 }}>
                         {task.title}
                       </span>
                     </span>
@@ -156,12 +156,12 @@ export function Home() {
                 onClick={() => nav(`/tasks/${t.key}`)}
               >
                 <TaskKey>{t.key}</TaskKey>
-                <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                <span className="ellipsis" style={{ fontSize: 13 }}>
                   {t.title}
                 </span>
                 <StatusBadge status={t.status} category={t.statusCategory} small />
                 <PriorityChip priority={t.priority} small />
-                <span className="mono" style={{ fontSize: 11.5, color: dueColor(t.dueState), textAlign: 'right' }}>
+                <span className="mono" style={{ fontSize: 12, color: dueColor(t.dueState), textAlign: 'right' }}>
                   {t.due}
                 </span>
               </div>
@@ -187,12 +187,12 @@ export function Home() {
                     {p.abbr}
                   </span>
                   <span style={{ minWidth: 0, flex: 1 }}>
-                    <span className="ellipsis" style={{ display: 'block', fontSize: 12.5, fontWeight: 500 }}>
+                    <span className="ellipsis" style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
                       {p.name}
                     </span>
                     <Progress pct={p.pct} color={p.fg} variant="thin" style={{ marginTop: 6 }} />
                   </span>
-                  <span className="mono" style={{ fontSize: 11.5, color: p.atRisk ? 'var(--dang)' : 'var(--tx2)' }}>
+                  <span className="mono" style={{ fontSize: 12, color: p.atRisk ? 'var(--dang)' : 'var(--tx2)' }}>
                     {p.pct}
                   </span>
                 </Link>

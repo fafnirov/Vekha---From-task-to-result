@@ -23,7 +23,7 @@
 }
 
 .btn:active {
-  transform: scale(0.97);
+  transform: translateY(0.5px);
 }
 
 .btn:disabled {
@@ -36,22 +36,29 @@
   background: var(--ac);
   color: var(--ac-fg);
   border-color: transparent;
-  font-weight: 500;
-  font-size: 12.5px;
-  box-shadow: var(--sh1);
+  font-weight: var(--fw-med);
+  font-size: 13px;
+  box-shadow: var(--sh-ac), var(--hairline);
 }
 
 .btn--primary:hover:not(:disabled) {
   background: var(--ac-hov);
+  box-shadow: var(--sh-ac), var(--hairline), 0 4px 12px -2px oklch(0.5 0.185 277 / 0.3);
+}
+
+/* Кольцо не должно сливаться с собственной заливкой кнопки. */
+.btn--primary:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface), var(--ring);
 }
 
 .btn--secondary {
   background: var(--surface);
-  border-color: var(--border);
+  border-color: var(--border2);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  border-color: var(--border2);
+  border-color: var(--border3);
+  background: var(--surface2);
   color: var(--tx);
 }
 
@@ -119,12 +126,12 @@
 
 .btn--sm {
   height: 26px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .btn--lg {
   height: 30px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .btn--danger:hover:not(:disabled) {
@@ -150,8 +157,8 @@
   border-radius: 5px;
   background: transparent;
   color: var(--tx2);
-  font-size: 11.5px;
-  font-weight: 450;
+  font-size: 12px;
+  font-weight: var(--fw-med);
   cursor: pointer;
   white-space: nowrap;
   transition: background 150ms ease, color 150ms ease;
@@ -182,8 +189,8 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 450;
+  font-size: 13px;
+  font-weight: var(--fw-med);
   color: var(--tx2);
   display: flex;
   align-items: center;
@@ -218,7 +225,7 @@
 
 .tab__count {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--tx3);
 }
 
@@ -248,12 +255,12 @@
 .badge--sm {
   height: 19px;
   padding: 0 7px;
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .key {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ac-tx);
   background: var(--ac-soft);
   padding: 1.5px 5px;
@@ -270,7 +277,7 @@
   border-radius: 4px;
   background: var(--n-bg);
   color: var(--tx2);
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: var(--mono);
   flex: none;
 }
@@ -331,10 +338,10 @@
   user-select: none;
 }
 
-.av--xs { width: 20px; height: 20px; font-size: 9.5px; }
-.av--sm { width: 21px; height: 21px; font-size: 9.5px; }
+.av--xs { width: 20px; height: 20px; font-size: 10px; }
+.av--sm { width: 21px; height: 21px; font-size: 10px; }
 .av--md { width: 24px; height: 24px; font-size: 10px; }
-.av--lg { width: 26px; height: 26px; font-size: 10.5px; }
+.av--lg { width: 26px; height: 26px; font-size: 11px; }
 
 .av-stack {
   display: flex;
@@ -400,7 +407,7 @@
   background: transparent;
   flex: 1;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--tx);
 }
 
@@ -410,7 +417,7 @@
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: 13px;
   outline: none;
   color: var(--tx);
   width: 100%;
@@ -431,7 +438,7 @@
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: 13px;
   outline: none;
   resize: vertical;
   color: var(--tx);
@@ -455,7 +462,7 @@
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--tx);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   width: 100%;
   transition: border-color 150ms ease;
@@ -472,7 +479,7 @@
 }
 
 .label > span:first-child {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--tx2);
 }
 
@@ -625,8 +632,12 @@
 
 .card--hover:hover {
   box-shadow: var(--sh2);
-  transform: translateY(-2px);
   border-color: var(--border2);
+}
+
+/* Подъём уместен только там, где карточек мало и они крупные. */
+.kpi.card--hover:hover {
+  transform: translateY(-2px);
 }
 
 .card__head {
@@ -650,9 +661,11 @@
   gap: 9px;
   padding: 0 13px;
   height: var(--rowh);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-row);
   cursor: pointer;
-  transition: background 140ms ease;
+  position: relative;
+  line-height: var(--lh-flat);
+  transition: background var(--t-fast) ease;
 }
 
 .row:hover {
@@ -661,6 +674,22 @@
 
 .row--on {
   background: var(--ac-soft);
+}
+
+/* Выделение читается периферийным зрением, а не только заливкой. */
+.row--on::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ac);
+}
+
+.row:focus-visible {
+  outline: none;
+  box-shadow: inset var(--ring);
 }
 
 .row--static {
@@ -673,8 +702,12 @@
   gap: 8px;
   padding: 0 12px;
   height: 32px;
-  background: var(--surface2);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--sunken);
   border-bottom: 1px solid var(--border);
+  letter-spacing: 0.06em;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -778,7 +811,7 @@
   cursor: pointer;
   text-align: left;
   color: var(--tx);
-  font-size: 12.5px;
+  font-size: 13px;
   transition: background 130ms ease;
 }
 
@@ -795,8 +828,8 @@
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(10, 14, 22, 0.42);
-  backdrop-filter: blur(2px);
+  background: oklch(0.2 0.02 268 / 0.5);
+  backdrop-filter: blur(3px) saturate(0.9);
   z-index: 80;
   display: flex;
   justify-content: center;

@@ -137,10 +137,10 @@ export function SearchPalette() {
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => go(i)}
               >
-                <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)', width: 78 }}>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--tx3)', width: 78 }}>
                   {t.key}
                 </span>
-                <span className="ellipsis" style={{ flex: 1, fontSize: 12.5 }}>
+                <span className="ellipsis" style={{ flex: 1, fontSize: 13 }}>
                   {t.title}
                 </span>
                 <StatusBadge status={t.status} category={t.statusCategory} dot={false} small />
@@ -165,7 +165,7 @@ export function SearchPalette() {
                     onClick={() => go(i)}
                   >
                     <Icon name="folder_open" size={17} color="var(--tx2)" />
-                    <span style={{ flex: 1, fontSize: 12.5 }}>{p.name}</span>
+                    <span style={{ flex: 1, fontSize: 13 }}>{p.name}</span>
                   </button>
                 )
               })}
@@ -181,10 +181,10 @@ export function SearchPalette() {
                     onClick={() => go(i)}
                   >
                     <Icon name="layers" size={17} color="var(--tx2)" />
-                    <span className="mono" style={{ fontSize: 11.5, color: 'var(--ac-tx)', width: 78 }}>
+                    <span className="mono" style={{ fontSize: 12, color: 'var(--ac-tx)', width: 78 }}>
                       {qq.key}
                     </span>
-                    <span style={{ flex: 1, fontSize: 12.5 }}>{qq.name}</span>
+                    <span style={{ flex: 1, fontSize: 13 }}>{qq.name}</span>
                   </button>
                 )
               })}
@@ -206,7 +206,7 @@ export function SearchPalette() {
                 onClick={() => go(i)}
               >
                 <Icon name={s.icon} size={17} color="var(--tx2)" />
-                <span style={{ flex: 1, fontSize: 12.5 }}>{s.label}</span>
+                <span style={{ flex: 1, fontSize: 13 }}>{s.label}</span>
                 <span className="menu__kb">{s.kb}</span>
               </button>
             )

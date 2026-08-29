@@ -382,7 +382,7 @@ export function Tasks() {
 
         {sel.length > 0 && (
           <div className="tasks__bulk">
-            <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ac-tx)' }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ac-tx)' }}>
               Выбрано: {sel.length}
             </span>
             <div style={{ width: 1, height: 16, background: 'var(--ac-soft2)' }} />
@@ -511,7 +511,7 @@ export function Tasks() {
                   />
                   <TaskKey>{t.key}</TaskKey>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                    <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                    <span className="ellipsis" style={{ fontSize: 13 }}>
                       {t.title}
                     </span>
                     {t.tags.slice(0, 2).map((tg) => (
@@ -549,7 +549,7 @@ export function Tasks() {
                     </span>
                   )}
                   {on('est') && (
-                    <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', textAlign: 'right' }}>
+                    <span className="mono" style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'right' }}>
                       {t.est || '—'}
                     </span>
                   )}
@@ -578,7 +578,7 @@ export function Tasks() {
           )}
 
           <div className="tasks__foot">
-            <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
+            <span style={{ fontSize: 12, color: 'var(--tx3)' }}>
               Показано {rows.length} из {total}
             </span>
             <div className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -734,7 +734,7 @@ function BulkMenu({
                 className="menu__item"
                 onClick={() => onPick(o.value)}
               >
-                <span style={{ flex: 1, fontSize: 12.5 }}>{o.label}</span>
+                <span style={{ flex: 1, fontSize: 13 }}>{o.label}</span>
               </button>
             ))}
           </div>

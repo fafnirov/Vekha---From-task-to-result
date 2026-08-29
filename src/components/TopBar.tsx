@@ -138,7 +138,7 @@ export function TopBar() {
             {createItems.map((ci) => (
               <button key={ci.label} type="button" className="menu__item" onClick={ci.action}>
                 <Icon name={ci.icon} size={17} color="var(--tx2)" />
-                <span style={{ flex: 1, fontSize: 12.5 }}>{ci.label}</span>
+                <span style={{ flex: 1, fontSize: 13 }}>{ci.label}</span>
                 <span className="menu__kb">{ci.kb}</span>
               </button>
             ))}
@@ -154,12 +154,12 @@ export function TopBar() {
             style={{ top: 46, right: 52, width: 340, padding: 0, overflow: 'hidden' }}
           >
             <div className="notif__head">
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Уведомления</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Уведомления</div>
               {unread > 0 && <span className="count-pill">{unread}</span>}
               <button
                 type="button"
                 className="btn btn--link spacer"
-                style={{ fontSize: 11.5 }}
+                style={{ fontSize: 12 }}
                 onClick={() => void readAll()}
               >
                 Прочитать все

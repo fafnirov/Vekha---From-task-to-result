@@ -282,7 +282,7 @@ export function CreateTaskModal() {
           </div>
 
           <div className="tagline">
-            <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>Теги</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Теги</span>
             {tags.map((t) => (
               <span key={t} className="tag">
                 {t}
@@ -325,7 +325,7 @@ export function CreateTaskModal() {
             <Checkbox on={more} onClick={() => setMore(!more)} label="Создать ещё одну" />
             Создать ещё одну
           </button>
-          <span className="spacer" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
+          <span className="spacer" style={{ fontSize: 12, color: 'var(--tx3)' }}>
             Автор: {me?.name}
           </span>
           <button type="button" className="btn btn--secondary btn--lg" onClick={ui.closeCreateModal}>

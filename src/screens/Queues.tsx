@@ -91,7 +91,7 @@ export function Queues() {
             <span className="key" style={{ fontWeight: 500 }}>
               {q.key}
             </span>
-            <span style={{ fontSize: 12.5 }}>{q.name}</span>
+            <span style={{ fontSize: 13 }}>{q.name}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
               <Avatar id={q.owner} size="xs" title={false} />
               <span className="ellipsis" style={{ fontSize: 12, color: 'var(--tx2)' }}>
@@ -264,7 +264,7 @@ function QueueDialog({
           </div>
 
           {!queue && (
-            <p style={{ fontSize: 11.5, color: 'var(--tx3)', margin: 0 }}>
+            <p style={{ fontSize: 12, color: 'var(--tx3)', margin: 0 }}>
               Ключ подставляется в номера задач: VEKHA-1, VEKHA-2 и так далее. Позже его изменить нельзя.
             </p>
           )}

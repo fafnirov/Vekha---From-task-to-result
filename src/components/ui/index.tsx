@@ -304,7 +304,7 @@ export function Empty({
       <div
         className="pretty"
         style={{
-          fontSize: 12.5,
+          fontSize: 13,
           color: 'var(--tx2)',
           maxWidth: 320,
           textAlign: 'center',

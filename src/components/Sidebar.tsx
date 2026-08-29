@@ -151,7 +151,7 @@ export function Sidebar() {
                 }}
               >
                 <Icon name="manage_accounts" size={17} color="var(--tx2)" />
-                <span style={{ flex: 1, fontSize: 12.5 }}>Участники и права</span>
+                <span style={{ flex: 1, fontSize: 13 }}>Участники и права</span>
               </button>
               <button
                 type="button"
@@ -162,7 +162,7 @@ export function Sidebar() {
                 }}
               >
                 <Icon name="logout" size={17} color="var(--dang)" />
-                <span style={{ flex: 1, fontSize: 12.5 }}>Выйти</span>
+                <span style={{ flex: 1, fontSize: 13 }}>Выйти</span>
               </button>
             </div>
           </>

@@ -21,8 +21,8 @@ export function Toasts() {
           <div key={t.id} className="toast" style={{ borderLeftColor: k.c }}>
             <Icon name={k.icon} size={18} color={k.c} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 500 }}>{t.title}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{t.text}</div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>{t.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--tx2)' }}>{t.text}</div>
             </div>
             <button
               type="button"

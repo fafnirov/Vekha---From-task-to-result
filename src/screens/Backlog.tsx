@@ -161,7 +161,7 @@ export function Backlog() {
           >
             <Icon name="rotate_right" size={17} color="var(--ac)" />
             <div className="card__title">{sprint?.name ?? 'Спринт не выбран'}</div>
-            {sprint && <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{sprint.range}</span>}
+            {sprint && <span style={{ fontSize: 12, color: 'var(--tx3)' }}>{sprint.range}</span>}
             <span className="badge mono" style={{ background: 'var(--n-bg)', color: 'var(--tx2)' }}>
               {planned} SP / {capacity || '—'}
             </span>
@@ -354,7 +354,7 @@ export function Backlog() {
               </span>
               <span
                 className="mono"
-                style={{ fontSize: 11.5, color: p.overloaded ? 'var(--dang)' : 'var(--tx2)' }}
+                style={{ fontSize: 12, color: p.overloaded ? 'var(--dang)' : 'var(--tx2)' }}
               >
                 {p.points}/{p.capacity || '—'}
               </span>
@@ -427,13 +427,13 @@ function PlanRow({
         color={draggable ? 'var(--border2)' : 'transparent'}
       />
       <TaskKey>{task.key}</TaskKey>
-      <span className="ellipsis" style={{ fontSize: 12.5 }}>
+      <span className="ellipsis" style={{ fontSize: 13 }}>
         {task.title}
       </span>
       <PriorityChip priority={task.priority} small />
       <StatusBadge status={task.status} category={task.statusCategory} small />
       <Avatar id={task.who} size="md" />
-      <span className="mono" style={{ fontSize: 11.5, color: dueColor(task.dueState), textAlign: 'right' }}>
+      <span className="mono" style={{ fontSize: 12, color: dueColor(task.dueState), textAlign: 'right' }}>
         {task.est ? `${task.est} SP` : '—'}
       </span>
       {action ? (

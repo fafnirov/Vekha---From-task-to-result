@@ -196,7 +196,7 @@ export function Board() {
                         <span
                           style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flex: 'none' }}
                         />
-                        <span className="ellipsis" style={{ fontSize: 12.5, fontWeight: 600 }}>
+                        <span className="ellipsis" style={{ fontSize: 13, fontWeight: 600 }}>
                           {col.name}
                         </span>
                         <span
@@ -285,13 +285,13 @@ export function Board() {
                                 </span>
                               )}
                               {t.est > 0 && (
-                                <span className="count-pill spacer" style={{ fontSize: 10.5 }}>
+                                <span className="count-pill spacer" style={{ fontSize: 11 }}>
                                   {t.est} SP
                                 </span>
                               )}
                             </div>
 
-                            <div className="pretty" style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+                            <div className="pretty" style={{ fontSize: 13, lineHeight: 1.4 }}>
                               {t.title}
                             </div>
 

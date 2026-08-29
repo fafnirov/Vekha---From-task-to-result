@@ -340,12 +340,12 @@ export function Filters() {
                 onClick={() => nav(`/tasks/${t.key}`)}
               >
                 <TaskKey>{t.key}</TaskKey>
-                <span className="ellipsis" style={{ fontSize: 12.5 }}>
+                <span className="ellipsis" style={{ fontSize: 13 }}>
                   {t.title}
                 </span>
                 <StatusBadge status={t.status} category={t.statusCategory} />
                 <Avatar id={t.who} size="md" />
-                <span className="mono" style={{ fontSize: 11.5, color: dueColor(t.dueState) }}>
+                <span className="mono" style={{ fontSize: 12, color: dueColor(t.dueState) }}>
                   {t.due}
                 </span>
               </div>
@@ -391,7 +391,7 @@ function FilterItem({
   return (
     <div className="filter-item" onClick={onPick}>
       <Icon name={filter.icon} size={16} color={filter.icf} />
-      <span className="ellipsis" style={{ flex: 1, fontSize: 12.5 }}>
+      <span className="ellipsis" style={{ flex: 1, fontSize: 13 }}>
         {filter.label}
       </span>
       {filter.error ? (

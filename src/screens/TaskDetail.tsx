@@ -235,7 +235,7 @@ export function TaskDetail() {
           <StatusBadge status={task.status} category={task.statusCategory} />
           <Icon name="arrow_forward" size={15} color="var(--tx3)" />
           {data.transitions.length === 0 && (
-            <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>переходов нет</span>
+            <span style={{ fontSize: 12, color: 'var(--tx3)' }}>переходов нет</span>
           )}
           {data.transitions.map((t) => (
             <button
@@ -339,7 +339,7 @@ export function TaskDetail() {
               <span
                 className="ellipsis"
                 style={{
-                  fontSize: 12.5,
+                  fontSize: 13,
                   textDecoration: s.statusCategory === 'done' ? 'line-through' : undefined,
                   color: s.statusCategory === 'done' ? 'var(--tx3)' : undefined,
                 }}
@@ -348,7 +348,7 @@ export function TaskDetail() {
               </span>
               <StatusBadge status={s.status} category={s.statusCategory} small />
               <Avatar id={s.who} size="md" />
-              <span className="mono" style={{ fontSize: 11.5, color: dueColor(s.dueState), textAlign: 'right' }}>
+              <span className="mono" style={{ fontSize: 12, color: dueColor(s.dueState), textAlign: 'right' }}>
                 {s.due}
               </span>
             </div>
@@ -376,9 +376,9 @@ export function TaskDetail() {
               style={{ gridTemplateColumns: '150px 92px minmax(0,1fr) 116px 26px', gap: 8 }}
               onClick={() => nav(`/tasks/${l.task.key}`)}
             >
-              <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{l.label}</span>
+              <span style={{ fontSize: 12, color: 'var(--tx3)' }}>{l.label}</span>
               <TaskKey>{l.task.key}</TaskKey>
-              <span className="ellipsis" style={{ fontSize: 12.5 }}>
+              <span className="ellipsis" style={{ fontSize: 13 }}>
                 {l.task.title}
               </span>
               <StatusBadge status={l.task.status} category={l.task.statusCategory} small />
@@ -691,7 +691,7 @@ export function TaskDetail() {
 
           <Field label="Теги">
             <div className="tagline tagline--tight">
-              {task.tags.length === 0 && <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>—</span>}
+              {task.tags.length === 0 && <span style={{ fontSize: 12, color: 'var(--tx3)' }}>—</span>}
               {task.tags.map((t) => (
                 <Link key={t} to={`/tasks?tag=${t}`}>
                   <Tag>{t}</Tag>

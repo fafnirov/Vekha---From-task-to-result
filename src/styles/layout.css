@@ -34,7 +34,7 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--sunken);
   border-right: 1px solid var(--border);
   min-height: 0;
 }
@@ -144,7 +144,7 @@
 }
 
 .org__sub {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--tx3);
 }
 
@@ -159,7 +159,7 @@
 }
 
 .nav__group {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -172,6 +172,7 @@
 }
 
 .nav__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -183,8 +184,8 @@
   cursor: pointer;
   background: transparent;
   color: var(--tx2);
-  font-weight: 450;
-  font-size: 12.5px;
+  font-weight: var(--fw-med);
+  font-size: 13px;
   transition: background 150ms ease, color 150ms ease;
 }
 
@@ -200,7 +201,18 @@
 .nav__item--on {
   background: var(--ac-soft);
   color: var(--ac-tx);
-  font-weight: 600;
+  font-weight: var(--fw-bold);
+}
+
+.nav__item--on::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--ac);
 }
 
 .nav__item--on .ic {
@@ -216,7 +228,7 @@
 
 .nav__count {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--tx3);
 }
 
@@ -251,7 +263,7 @@
 }
 
 .sidebar__me span {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--tx3);
 }
 
@@ -394,7 +406,7 @@
   color: var(--ac-fg);
   border: 0;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--sh1);

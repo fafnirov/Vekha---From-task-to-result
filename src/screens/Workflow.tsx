@@ -290,10 +290,10 @@ function WorkflowTab({ manage }: { manage: boolean }) {
               <span style={{ fontSize: 12 }}>{t.from}</span>
               <Icon name="arrow_forward" size={15} color="var(--tx3)" />
               <span style={{ fontSize: 12, fontWeight: 500 }}>{t.to}</span>
-              <span className="ellipsis" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
+              <span className="ellipsis" style={{ fontSize: 12, color: 'var(--tx2)' }}>
                 {t.cond || '—'}
               </span>
-              <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{t.role}</span>
+              <span style={{ fontSize: 12, color: 'var(--tx3)' }}>{t.role}</span>
               {manage ? (
                 <button
                   type="button"
@@ -533,14 +533,14 @@ function FieldsTab({ manage }: { manage: boolean }) {
       {(fields.data ?? []).map((f) => (
         <div key={f.id} className="row row--static" style={{ gridTemplateColumns: GRID, gap: 10 }}>
           <Icon name={f.icon} size={17} color="var(--tx2)" />
-          <span style={{ fontSize: 12.5 }}>
+          <span style={{ fontSize: 13 }}>
             {f.label}
             {f.system && <span className="field__sys">системное</span>}
           </span>
-          <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx3)' }}>
+          <span className="mono" style={{ fontSize: 12, color: 'var(--tx3)' }}>
             {f.type}
           </span>
-          <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{f.screen}</span>
+          <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{f.screen}</span>
           <Toggle
             on={f.req}
             label={`Обязательное поле ${f.label}`}
@@ -587,7 +587,7 @@ function PermissionsTab({ manage }: { manage: boolean }) {
 
       {(permissions.data?.rows ?? []).map((row) => (
         <div key={row.id} className="row row--static" style={{ gridTemplateColumns: grid, gap: 10 }}>
-          <span style={{ fontSize: 12.5 }}>{row.label}</span>
+          <span style={{ fontSize: 13 }}>{row.label}</span>
           {row.cells.map((cell, i) => (
             <span key={roles[i]?.key ?? i} style={{ justifySelf: 'center' }}>
               <Checkbox
@@ -935,7 +935,7 @@ function BoardTab({ manage }: { manage: boolean }) {
 
       {(board.data?.columns ?? []).map((c) => (
         <div key={c.id} className="row row--static" style={{ gridTemplateColumns: '160px minmax(0,1fr) 120px', gap: 10 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500 }}>{c.name}</span>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</span>
           <span className="tagline tagline--tight">
             {c.statuses.map((s) => (
               <span key={s} className="tag">
@@ -1008,13 +1008,13 @@ function PeopleTab() {
           <div key={p.id} className="row row--static" style={{ gridTemplateColumns: GRID, gap: 10 }}>
             <Avatar id={p.code} size="md" title={false} />
             <span style={{ minWidth: 0 }}>
-              <span className="ellipsis" style={{ display: 'block', fontSize: 12.5 }}>
+              <span className="ellipsis" style={{ display: 'block', fontSize: 13 }}>
                 {p.name}
                 {p.id === me?.id && <span className="field__sys">это вы</span>}
               </span>
               <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{p.role}</span>
             </span>
-            <span className="ellipsis" style={{ fontSize: 11.5, color: 'var(--tx2)' }}>
+            <span className="ellipsis" style={{ fontSize: 12, color: 'var(--tx2)' }}>
               {p.email}
             </span>
             <select
