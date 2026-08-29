@@ -535,3 +535,53 @@
     transform: none !important;
   }
 }
+
+/* ── Свёрнутая панель ───────────────────────────────────────────────── */
+
+/* В 56px отдельная кнопка не помещается, поэтому логотип сам разворачивает
+   панель: при наведении ромб сменяется стрелкой. */
+.sidebar__brand {
+  justify-content: center;
+}
+
+.sidebar:not(.sidebar--open) .sidebar__brand {
+  padding: 0 10px;
+}
+
+.sidebar__mark--btn {
+  position: relative;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 160ms var(--spring), background 160ms ease;
+}
+
+.sidebar__mark--btn:hover {
+  background: var(--ac-hov);
+  transform: scale(1.06);
+}
+
+.sidebar__mark--btn:active {
+  transform: scale(0.94);
+}
+
+.sidebar__mark--btn .ic {
+  position: absolute;
+  color: var(--ac-fg);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.sidebar__mark--btn:hover .ic,
+.sidebar__mark--btn:focus-visible .ic {
+  opacity: 1;
+}
+
+.sidebar__mark--btn:hover i,
+.sidebar__mark--btn:focus-visible i {
+  opacity: 0;
+}
+
+.sidebar__mark--btn i {
+  transition: opacity 140ms ease;
+}

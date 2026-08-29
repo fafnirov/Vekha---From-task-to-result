@@ -63,22 +63,42 @@ export function Sidebar() {
   return (
     <aside className={mobileNav ? 'sidebar sidebar--open' : 'sidebar'}>
       <div className="sidebar__brand">
-        <div className="sidebar__mark">
-          <i />
-        </div>
-        {expanded && <div className="sidebar__name">Vekha</div>}
-        {expanded && <div className="sidebar__ver">{org.version}</div>}
-        <Tooltip label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'} side="right">
-          <button
-            type="button"
-            className="sidebar__collapse"
-            onClick={toggleNav}
-            style={{ marginLeft: expanded ? 0 : 'auto' }}
-            aria-label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-          >
-            <Icon name={navCollapsed ? 'left_panel_open' : 'left_panel_close'} size={17} />
-          </button>
-        </Tooltip>
+        {expanded ? (
+          <>
+            <div className="sidebar__mark">
+              <i />
+            </div>
+            <div className="sidebar__name">Vekha</div>
+            <div className="sidebar__ver">{org.version}</div>
+            <Tooltip label="Свернуть меню" side="right">
+              <button
+                type="button"
+                className="sidebar__collapse"
+                onClick={toggleNav}
+                aria-label="Свернуть меню"
+              >
+                <Icon name="left_panel_close" size={17} />
+              </button>
+            </Tooltip>
+          </>
+        ) : (
+          /*
+           * В свёрнутом виде отдельная кнопка не помещается в 56px и
+           * обрезается — развернуть панель становится нечем. Поэтому
+           * логотип сам работает кнопкой разворота.
+           */
+          <Tooltip label="Развернуть меню" side="right">
+            <button
+              type="button"
+              className="sidebar__mark sidebar__mark--btn"
+              onClick={toggleNav}
+              aria-label="Развернуть меню"
+            >
+              <i />
+              <Icon name="left_panel_open" size={16} />
+            </button>
+          </Tooltip>
+        )}
       </div>
 
       <button
