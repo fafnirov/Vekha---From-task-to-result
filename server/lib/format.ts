@@ -157,3 +157,22 @@ export function abbrFrom(name: string): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[1][0]).toUpperCase()
 }
+
+/**
+ * Минуты в человеческую подпись: «1ч 30м», «45м», «2д 3ч».
+ * Рабочий день считается восьмичасовым — как в трекерах, а не сутками.
+ */
+export function formatMinutes(total: number): string {
+  if (total <= 0) return '0м'
+
+  const perDay = 8 * 60
+  const days = Math.floor(total / perDay)
+  const hours = Math.floor((total % perDay) / 60)
+  const minutes = total % 60
+
+  const parts: string[] = []
+  if (days) parts.push(`${days}д`)
+  if (hours) parts.push(`${hours}ч`)
+  if (minutes) parts.push(`${minutes}м`)
+  return parts.join(' ')
+}

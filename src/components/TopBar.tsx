@@ -181,7 +181,16 @@ export function TopBar() {
                 <Link
                   key={n.id}
                   to={n.key ? `/tasks/${n.key}` : '/'}
-                  onClick={ui.closeAll}
+                  onClick={() => {
+                    // Прочитанным считается открытое, а не всё разом.
+                    if (n.unread) {
+                      void api
+                        .post('/api/notifications/read', { id: n.id })
+                        .then(() => invalidate(['notifications']))
+                        .catch(() => undefined)
+                    }
+                    ui.closeAll()
+                  }}
                   className={n.unread ? 'notif notif--unread' : 'notif'}
                 >
                   <Avatar id={n.who} size="base" title={false} />

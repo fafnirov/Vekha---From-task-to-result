@@ -1701,3 +1701,55 @@
   border-color: var(--ac);
   background: var(--ac-soft);
 }
+
+/* ── Учёт времени ───────────────────────────────────────────────────── */
+
+.worklog__form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border-row);
+  flex-wrap: wrap;
+}
+
+.worklog__hint {
+  padding: 6px 13px 8px;
+  font-size: 11px;
+  color: var(--tx3);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border-row);
+}
+
+.worklog__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px;
+  border-bottom: 1px solid var(--border-row);
+}
+
+.worklog__row:last-child {
+  border-bottom: 0;
+}
+
+.worklog__amount {
+  font-size: 12px;
+  font-weight: var(--fw-med);
+  min-width: 62px;
+}
+
+/* Кнопки правки комментария — только у автора и только при наведении. */
+.comment__tools {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity var(--t-fast) ease;
+}
+
+.comment:hover .comment__tools,
+.comment:focus-within .comment__tools {
+  opacity: 1;
+}

@@ -17,10 +17,12 @@ import {
   useQueues,
   useSprints,
   useTags,
+  useApiMutation,
   useTasks,
   useWorkflows,
   type TaskQuery,
 } from '../api/hooks'
+import { api } from '../api/client'
 import { useSession } from '../store/session'
 import { useUi } from '../store/ui'
 import { useApp } from '../store/app'
@@ -165,6 +167,53 @@ export function Tasks() {
   )
 
   const tasks = useTasks(query)
+
+  /*
+   * Текущее представление в виде строки запроса. Кнопка «Сохранить»
+   * раньше просто уводила на конструктор с пустыми условиями — то есть
+   * теряла ровно то, что человек собрал.
+   */
+  const currentQuery = useMemo(() => {
+    const parts: string[] = []
+    if (view.query.q) parts.push(view.query.q)
+    if (view.query.mine) parts.push('assignee = currentUser()')
+    if (view.query.watching) parts.push('watcher = currentUser()')
+    if (view.query.overdue) parts.push('overdue = true')
+    if (view.query.category) parts.push(`category in (${view.query.category})`)
+    if (view.query.priority) parts.push(`priority in (${view.query.priority})`)
+    if (view.query.sprint) parts.push(`sprint = "${view.query.sprint}"`)
+
+    const quote = (value: string) => (value.includes(' ') ? `"${value}"` : value)
+    for (const [key, value] of Object.entries(urlFilters)) {
+      if (key === 'q') parts.push(value)
+      else if (key === 'assignee') parts.push(`assignee = ${quote(value)}`)
+      else parts.push(`${key} = ${quote(value)}`)
+    }
+    if (debounced.trim()) parts.push(`text ~ "${debounced.trim()}"`)
+
+    return parts.join(' AND ')
+  }, [view, urlFilters, debounced])
+
+  const saveView = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.post('/api/filters', body),
+    ['filters'],
+  )
+
+  async function saveCurrentView() {
+    if (!currentQuery) {
+      toast('Нечего сохранять', 'Выберите представление или добавьте фильтры', 'warn')
+      return
+    }
+    const name = window.prompt('Название представления', view.label)
+    if (!name?.trim()) return
+
+    try {
+      await saveView.mutateAsync({ name: name.trim(), query: currentQuery, favorite: true })
+      toast('Представление сохранено', name.trim(), 'ok')
+    } catch (err) {
+      toastError(err, 'Не сохранилось')
+    }
+  }
   const rows = tasks.data?.items ?? []
   const total = tasks.data?.total ?? 0
   const pages = tasks.data?.pages ?? 1
@@ -284,7 +333,8 @@ export function Tasks() {
             type="button"
             className="btn btn--dashed btn--sm"
             style={{ marginLeft: 6 }}
-            onClick={() => nav('/filters')}
+            title={currentQuery || 'Нет активных условий'}
+            onClick={() => void saveCurrentView()}
           >
             <Icon name="bookmark_add" size={15} />
             Сохранить

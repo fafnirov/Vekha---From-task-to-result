@@ -101,6 +101,16 @@ export interface TaskPage {
   pages: number
 }
 
+export interface WorklogEntry {
+  id: string
+  minutes: number
+  note: string
+  who: PersonId
+  whoName: string
+  spentOn: string
+  day: string
+}
+
 export interface TaskDetail {
   task: Task
   subtasks: Task[]
@@ -122,6 +132,10 @@ export interface TaskDetail {
     url: string
     createdAt: string
   }[]
+  worklog: {
+    total: number
+    items: WorklogEntry[]
+  }
   transitions: {
     id: string
     to: StatusName

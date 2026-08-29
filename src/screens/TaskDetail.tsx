@@ -13,6 +13,7 @@ import {
 } from '../components/ui'
 import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, fileSize } from '../data/catalog'
 import { Checklist } from '../components/Checklist'
+import { Worklog } from '../components/Worklog'
 import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
 import { api, ApiError } from '../api/client'
 import {
@@ -62,6 +63,10 @@ export function TaskDetail() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [linkOpen, setLinkOpen] = useState(false)
+  /* Правка комментария: id и текущий текст. */
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
+  /* Создание подзадачи прямо из карточки родителя. */
+  const [subtaskTitle, setSubtaskTitle] = useState('')
   /* Диалог причины закрытия: сервер присылает варианты вместе с отказом. */
   const [closing, setClosing] = useState<{ to: string; options: ResolutionOption[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -93,6 +98,25 @@ export function TaskDetail() {
   const dropAttachment = useApiMutation<string, unknown>(
     (id) => api.del(`/api/attachments/${id}`),
     ['tasks'],
+  )
+  const patchComment = useApiMutation<{ id: string; text: string }, unknown>(
+    ({ id, text }) => api.patch(`/api/comments/${id}`, { text }),
+    ['comments'],
+  )
+  const dropComment = useApiMutation<string, unknown>(
+    (id) => api.del(`/api/comments/${id}`),
+    ['comments'],
+  )
+  const createSubtask = useApiMutation<string, { task: { key: string } }>(
+    (title) =>
+      api.post('/api/tasks', {
+        title,
+        queue: detail.data?.task.queue,
+        parentKey: key,
+        project: detail.data?.task.project === '—' ? null : detail.data?.task.project,
+        sprint: detail.data?.task.sprint === '—' ? null : detail.data?.task.sprint,
+      }),
+    ['tasks', 'board'],
   )
   const removeTask = useApiMutation<void, unknown>(
     () => api.del(`/api/tasks/${encodeURIComponent(key)}`),
@@ -343,6 +367,29 @@ export function TaskDetail() {
 
           {data.subtasks.length === 0 && <div className="task__none">Подзадач нет</div>}
 
+          {editable && (
+            <div className="checkitem checkitem--add">
+              <Icon name="add" size={16} color="var(--tx3)" />
+              <input
+                className="input input--bare"
+                value={subtaskTitle}
+                onChange={(e) => setSubtaskTitle(e.target.value)}
+                placeholder="Новая подзадача и ↵"
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' || subtaskTitle.trim().length < 3) return
+                  e.preventDefault()
+                  void createSubtask
+                    .mutateAsync(subtaskTitle.trim())
+                    .then((r) => {
+                      toast('Подзадача создана', r.task.key, 'ok')
+                      setSubtaskTitle('')
+                    })
+                    .catch(toastError)
+                }}
+              />
+            </div>
+          )}
+
           {data.subtasks.map((s) => (
             <div
               key={s.key}
@@ -371,6 +418,13 @@ export function TaskDetail() {
         </section>
 
         <Checklist taskKey={key} editable={editable} />
+
+        <Worklog
+          taskKey={key}
+          total={data.worklog.total}
+          items={data.worklog.items}
+          estimate={task.est}
+        />
 
         {/* ── Связи ────────────────────────────────────────────────────── */}
         <section className="card card--clip" style={{ marginTop: 12 }}>
@@ -502,8 +556,67 @@ export function TaskDetail() {
                         <b>{people.find((p) => p.code === c.who)?.name ?? c.who}</b>
                         <span className="mono">{c.time}</span>
                         {c.edited && <span className="comment__edited">изменён</span>}
+
+                        {c.authorId === me?.id && editing?.id !== c.id && (
+                          <span className="comment__tools">
+                            <button
+                              type="button"
+                              className="btn btn--icon-quiet"
+                              title="Изменить"
+                              onClick={() => setEditing({ id: c.id, text: c.text })}
+                            >
+                              <Icon name="edit" size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--icon-quiet"
+                              title="Удалить"
+                              onClick={() => {
+                                if (!window.confirm('Удалить комментарий?')) return
+                                void dropComment.mutateAsync(c.id).catch(toastError)
+                              }}
+                            >
+                              <Icon name="close" size={14} />
+                            </button>
+                          </span>
+                        )}
                       </div>
-                      <p className="pretty comment__text">{c.text}</p>
+
+                      {editing?.id === c.id ? (
+                        <>
+                          <textarea
+                            className="textarea"
+                            rows={3}
+                            value={editing.text}
+                            onChange={(e) => setEditing({ id: c.id, text: e.target.value })}
+                            autoFocus
+                          />
+                          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                            <button
+                              type="button"
+                              className="btn btn--primary btn--sm"
+                              disabled={!editing.text.trim()}
+                              onClick={() =>
+                                void patchComment
+                                  .mutateAsync({ id: c.id, text: editing.text })
+                                  .then(() => setEditing(null))
+                                  .catch(toastError)
+                              }
+                            >
+                              Сохранить
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--secondary btn--sm"
+                              onClick={() => setEditing(null)}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="pretty comment__text">{c.text}</p>
+                      )}
                     </div>
                   </article>
                 ))}

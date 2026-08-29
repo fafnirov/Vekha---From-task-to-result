@@ -24,7 +24,7 @@ import {
   type Role,
 } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
-import { shortDate } from '../lib/format.js'
+import { formatMinutes, shortDate } from '../lib/format.js'
 import { taskScope, canSeeQueue, visibleTask } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
@@ -232,6 +232,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           include: { uploadedBy: { select: { code: true, name: true } } },
           orderBy: { createdAt: 'desc' },
         },
+        worklogs: {
+          include: { user: { select: { code: true, name: true } } },
+          orderBy: { spentOn: 'desc' },
+        },
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
@@ -277,6 +281,18 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         url: `${BASE_PATH}/api/attachments/${a.id}`,
         createdAt: a.createdAt.toISOString(),
       })),
+      worklog: {
+        total: task.worklogs.reduce((sum, w) => sum + w.minutes, 0),
+        items: task.worklogs.map((w) => ({
+          id: w.id,
+          minutes: w.minutes,
+          note: w.note,
+          who: w.user.code,
+          whoName: w.user.name,
+          spentOn: w.spentOn.toISOString(),
+          day: shortDate(w.spentOn),
+        })),
+      },
       transitions: availableTransitions.map((t) => ({
         id: t.id,
         to: t.to.name,
@@ -1181,7 +1197,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
 
-    await prisma.worklog.create({
+    const created = await prisma.worklog.create({
       data: {
         taskId: task.id,
         userId: req.user!.id,
@@ -1190,7 +1206,33 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         spentOn: toDate(parsed.data.spentOn) ?? new Date(),
       },
     })
+    await record({
+      taskId: task.id,
+      actorId: req.user!.id,
+      kind: 'worklog',
+      note: `списал(а) ${formatMinutes(parsed.data.minutes)}`,
+    })
+
     emitChanges(['tasks'], task.key)
+    return reply.code(201).send({ id: created.id })
+  })
+
+  app.delete('/api/worklog/:id', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const entry = await prisma.worklog.findFirst({
+      where: { id, task: taskScope(req.user!) },
+      include: { task: { select: { key: true } } },
+    })
+    if (!entry) return reply.code(404).send({ error: 'Запись не найдена' })
+
+    // Своё списание убирает автор, чужое — тот, кто правит чужие задачи.
+    const mine = entry.userId === req.user!.id
+    if (!mine && !(await can(req.user!.role, 'task.editForeign'))) {
+      return reply.code(403).send({ error: 'Можно удалять только свои списания' })
+    }
+
+    await prisma.worklog.delete({ where: { id } })
+    emitChanges(['tasks'], entry.task.key)
     return { ok: true }
   })
 
