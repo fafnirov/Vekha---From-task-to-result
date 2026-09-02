@@ -46,10 +46,12 @@ if [ -n "$DB_FILE" ]; then
   STAMP=$(date +%Y%m%d-%H%M%S)
   sudo cp "$DB_FILE" "$BACKUP_DIR/vekha-$STAMP.db"
   echo "сохранена как vekha-$STAMP.db"
-  # Оставляем только последние KEEP_BACKUPS копий.
+  # Оставляем только последние KEEP_BACKUPS копий. `|| true` — потому что
+  # при pipefail неудачная выборка оборвала бы выкатку, хотя чистка
+  # старых копий к её успеху отношения не имеет.
   sudo ls -1t "$BACKUP_DIR"/vekha-*.db 2>/dev/null \
     | tail -n +$((KEEP_BACKUPS + 1)) \
-    | xargs -r sudo rm --
+    | xargs -r sudo rm -- || true
 else
   echo "файл базы не найден — пропускаю"
 fi
