@@ -5,6 +5,7 @@ import { NoQueues } from './NoQueues'
 import { PRIORITY_KEY, PRIORITY_NAMES } from '../data/catalog'
 import {
   useCreateTask,
+  useFields,
   useProjects,
   useQueues,
   useSprints,
@@ -29,6 +30,18 @@ export function CreateTaskModal() {
   const templates = useTemplates()
   const taskTypes = useTaskTypes()
   const create = useCreateTask()
+  const fields = useFields()
+
+  /*
+   * Обязательные поля задаются в настройках и проверяются сервером. Форма
+   * читает тот же список, чтобы отметить их звёздочкой и сказать о
+   * пропуске до отправки, а не после отказа.
+   */
+  const required = useMemo(
+    () => new Set((fields.data ?? []).filter((f) => f.req).map((f) => f.key)),
+    [fields.data],
+  )
+  const star = (key: string) => (required.has(key) ? <span className="label__req">*</span> : null)
 
   const [queue, setQueue] = useState('')
   const [type, setType] = useState('')
@@ -85,6 +98,27 @@ export function CreateTaskModal() {
     }
     if (!queue) {
       setError('Выберите очередь')
+      return
+    }
+
+    const gaps = (fields.data ?? [])
+      .filter((f) => f.req)
+      .filter((f) => {
+        if (f.key === 'description') return !description.trim()
+        if (f.key === 'assignee') return !assignee
+        if (f.key === 'sprint') return !sprint
+        if (f.key === 'estimate') return estimate === ''
+        if (f.key === 'dueDate') return !dueDate
+        return false
+      })
+      .map((f) => f.label)
+
+    if (gaps.length) {
+      setError(
+        gaps.length === 1
+          ? `Заполните поле «${gaps[0]}»`
+          : `Заполните обязательные поля: ${gaps.join(', ')}`,
+      )
       return
     }
     setError('')
@@ -205,7 +239,7 @@ export function CreateTaskModal() {
           </label>
 
           <label className="label">
-            <span>Описание</span>
+            <span>Описание{star('description')}</span>
             <textarea
               className="textarea"
               rows={4}
@@ -217,7 +251,7 @@ export function CreateTaskModal() {
 
           <div className="grid-3">
             <label className="label">
-              <span>Исполнитель</span>
+              <span>Исполнитель{star('assignee')}</span>
               <div className="select-with-avatar">
                 <Avatar id={assignee || null} size="xs" title={false} />
                 <select
@@ -251,7 +285,7 @@ export function CreateTaskModal() {
               </select>
             </label>
             <label className="label">
-              <span>Дедлайн</span>
+              <span>Дедлайн{star('dueDate')}</span>
               <input
                 className="input"
                 type="date"
@@ -274,7 +308,7 @@ export function CreateTaskModal() {
               </select>
             </label>
             <label className="label">
-              <span>Спринт</span>
+              <span>Спринт{star('sprint')}</span>
               <select className="select" value={sprint} onChange={(e) => setSprint(e.target.value)}>
                 <option value="">Бэклог</option>
                 {queueSprints.map((s) => (
@@ -285,7 +319,7 @@ export function CreateTaskModal() {
               </select>
             </label>
             <label className="label">
-              <span>Оценка, SP</span>
+              <span>Оценка, SP{star('estimate')}</span>
               <input
                 className="input"
                 type="number"

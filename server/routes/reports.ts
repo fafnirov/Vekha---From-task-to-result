@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate } from '../lib/auth.js'
+import { authenticate, requireTaskView } from '../lib/auth.js'
 import { personDto } from '../lib/dto.js'
 import { daysBetween, overdueLabel, pct, plural, startOfDay } from '../lib/format.js'
 import { taskScope } from '../lib/access.js'
@@ -25,6 +25,7 @@ function weekNumber(d: Date): number {
 
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
+  app.addHook('preHandler', requireTaskView)
 
   app.get('/api/reports', async (req) => {
     const p = z

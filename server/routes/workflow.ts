@@ -2,6 +2,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { ENFORCEABLE_FIELDS } from '../lib/fields.js'
 import { prisma } from '../lib/prisma.js'
 import { authenticate, require as requirePerm } from '../lib/auth.js'
 import { emitChanges } from '../lib/events.js'
@@ -333,6 +334,14 @@ export async function workflowRoutes(app: FastifyInstance): Promise<void> {
     // У заголовка нельзя снять обязательность — без него задача не имеет смысла.
     if (field.key === 'title' && parsed.data.required === false) {
       return reply.code(409).send({ error: 'Заголовок всегда обязателен' })
+    }
+
+    // Обязательным делается только то, что сервер умеет проверить.
+    // Молча принять тумблер и ничего не требовать — хуже, чем отказать.
+    if (parsed.data.required === true && !(ENFORCEABLE_FIELDS as readonly string[]).includes(field.key)) {
+      return reply
+        .code(409)
+        .send({ error: `Поле «${field.label}» нельзя сделать обязательным` })
     }
 
     const updated = await prisma.taskField.update({ where: { id }, data: parsed.data })

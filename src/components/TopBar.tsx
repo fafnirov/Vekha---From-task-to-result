@@ -114,10 +114,13 @@ export function TopBar() {
       </button>
 
       <div className="topbar__tools">
-        <button type="button" className="topbar__create" onClick={ui.toggleCreateMenu}>
-          <Icon name="add" size={17} />
-          Создать
-        </button>
+        {/* Роли, которой нечего создавать, кнопка открывала пустое меню. */}
+        {createItems.length > 0 && (
+          <button type="button" className="topbar__create" onClick={ui.toggleCreateMenu}>
+            <Icon name="add" size={17} />
+            Создать
+          </button>
+        )}
 
         <div style={{ position: 'relative' }}>
           <Tooltip

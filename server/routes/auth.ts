@@ -15,6 +15,7 @@ import {
 import { AVATAR_PALETTE, ROLES, type Role } from '../lib/constants.js'
 import { codeFrom, initialsFrom } from '../lib/format.js'
 import { personDto } from '../lib/dto.js'
+import { clearFailures, lockedFor, registerFailure } from '../lib/throttle.js'
 import { emitChange } from '../lib/events.js'
 
 const credentials = z.object({
@@ -118,16 +119,35 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
     const { email, password } = parsed.data
 
+    // Блокировка проверяется до обращения к базе: пока вход закрыт, пароль
+    // не сверяется вовсе.
+    const locked = lockedFor(email)
+    if (locked > 0) {
+      const minutes = Math.ceil(locked / 60000)
+      return reply.code(429).send({
+        error: `Слишком много попыток входа. Повторите через ${minutes} мин.`,
+        retryAfter: Math.ceil(locked / 1000),
+      })
+    }
+
     const user = await prisma.user.findUnique({ where: { email } })
     // Одинаковый ответ на неизвестную почту и неверный пароль — чтобы по
     // ответу нельзя было перебирать существующие адреса.
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
-      return reply.code(401).send({ error: 'Неверная почта или пароль' })
+      const left = registerFailure(email)
+      return reply.code(left > 0 ? 401 : 429).send({
+        error:
+          left > 0
+            ? `Неверная почта или пароль. Осталось попыток: ${left}`
+            : `Неверная почта или пароль. Попытки исчерпаны, вход закрыт на 15 минут.`,
+        attemptsLeft: left,
+      })
     }
     if (!user.active) {
       return reply.code(403).send({ error: 'Учётная запись отключена' })
     }
 
+    clearFailures(email)
     setAuthCookie(reply, app.jwt.sign({ sub: user.id }, { expiresIn: '30d' }))
     return { user: personDto(user) }
   })

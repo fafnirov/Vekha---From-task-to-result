@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate } from '../lib/auth.js'
+import { authenticate, requireTaskView } from '../lib/auth.js'
 import { emitChanges } from '../lib/events.js'
 import { parseQuery, QueryError, validateQuery } from '../lib/query.js'
 import { taskScope } from '../lib/access.js'
@@ -15,7 +15,7 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
    * Список фильтров с числом попаданий: свои плюс те, которыми поделились.
    * Счётчик считается настоящим запросом, поэтому цифры не врут.
    */
-  app.get('/api/filters', async (req) => {
+  app.get('/api/filters', { preHandler: requireTaskView }, async (req) => {
     const rows = await prisma.savedFilter.findMany({
       where: { OR: [{ ownerId: req.user!.id }, { shared: true }] },
       include: { owner: { select: { code: true, name: true } } },

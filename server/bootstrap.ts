@@ -51,6 +51,13 @@ async function ensureFields(): Promise<number> {
   }))
 
   if (missing.length) await prisma.taskField.createMany({ data: missing })
+
+  // Поля, которых нет в списке по умолчанию, задача нигде не хранит:
+  // добавить своё поле интерфейс не даёт, значит такая строка осталась
+  // от прежних версий и в настройках только обманывает.
+  const known = DEFAULT_FIELDS.map((f) => f.key)
+  await prisma.taskField.deleteMany({ where: { key: { notIn: known } } })
+
   return missing.length
 }
 

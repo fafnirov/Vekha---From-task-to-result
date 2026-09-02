@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, COOKIE_NAME } from '../lib/auth.js'
+import { COOKIE_NAME, authenticate, requireTaskView } from '../lib/auth.js'
 import {
   feedDto,
   notificationDto,
@@ -90,7 +90,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
     scoped.addHook('preHandler', authenticate)
 
     /** Сводка для главного экрана. */
-    scoped.get('/api/dashboard', async (req) => {
+    scoped.get('/api/dashboard', { preHandler: requireTaskView }, async (req) => {
       const me = req.user!
       const now = new Date()
       const today = startOfDay(now)
@@ -242,6 +242,11 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
 
     /* ── Уведомления ────────────────────────────────────────────────── */
 
+    /*
+     * Уведомления правом task.view не закрыты намеренно: это личный
+     * ящик человека — упоминания и назначения, адресованные лично ему.
+     * Сама задача по ссылке всё равно не откроется.
+     */
     scoped.get('/api/notifications', async (req) => {
       const p = z
         .object({
@@ -278,7 +283,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
 
     /* ── Лента активности ───────────────────────────────────────────── */
 
-    scoped.get('/api/activity', async (req) => {
+    scoped.get('/api/activity', { preHandler: requireTaskView }, async (req) => {
       const p = z
         .object({
           limit: z.coerce.number().int().min(1).max(100).default(30),
@@ -304,7 +309,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
     /* ── Поиск ──────────────────────────────────────────────────────── */
 
     /** Командная палитра: задачи, проекты, очереди и люди в одном ответе. */
-    scoped.get('/api/search', async (req) => {
+    scoped.get('/api/search', { preHandler: requireTaskView }, async (req) => {
       const p = z.object({ q: z.string().default('') }).parse(req.query)
       const term = p.q.trim()
       if (term.length < 1) return { tasks: [], projects: [], queues: [], people: [] }

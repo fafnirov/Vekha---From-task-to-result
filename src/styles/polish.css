@@ -585,3 +585,55 @@
 .sidebar__mark--btn i {
   transition: opacity 140ms ease;
 }
+
+/* ── Обязательные поля и выданный пароль ────────────────────────────── */
+
+/*
+ * Звёздочка у обязательного поля. Цветом, а не только символом: на
+ * плотной форме одинокая точка теряется среди подписей.
+ */
+.label__req {
+  color: var(--dang);
+  font-weight: var(--fw-bold);
+  margin-left: 3px;
+}
+
+/* Временный пароль: моноширинный, крупный и выделяемый одним движением. */
+.secret {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  background: var(--sunken);
+}
+
+.secret__value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.04em;
+  color: var(--tx);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Затемнение центрирует окно по вертикали.
+ *
+ * Без этого `align-items` оставался `stretch`, и всякое окно
+ * растягивалось на всю высоту экрана: содержимое липло к верхнему краю,
+ * а под ним оставалась пустая панель до самого низа. Центрирование
+ * выставляли вручную только два окна из двенадцати, остальные десять
+ * так и показывались.
+ *
+ * Высота окна ограничена изнутри (`.modal__body` — 72vh с прокруткой),
+ * поэтому центрирование не создаёт переполнения; отступ по краям нужен
+ * на низких экранах.
+ */
+.scrim {
+  align-items: center;
+  padding: 20px;
+}

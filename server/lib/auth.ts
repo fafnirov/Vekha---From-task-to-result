@@ -125,3 +125,18 @@ export async function canEditTask(
   if (task.authorId === user.id || task.assigneeId === user.id) return true
   return can(user.role, 'task.editForeign')
 }
+
+/**
+ * Хук для маршрутов, отдающих задачи.
+ *
+ * Право `task.view` объявлено в матрице настроек, но до сих пор нигде не
+ * спрашивалось: роль со снятой галочкой видела ровно то же, что и все
+ * остальные. Теперь снятая галочка действительно закрывает и список
+ * задач, и доску, и отчёты, и планирование спринтов.
+ */
+export async function requireTaskView(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const role = req.user?.role
+  if (!role) return void reply.code(401).send({ error: 'Требуется вход' })
+  if (await can(role, 'task.view')) return
+  reply.code(403).send({ error: 'Просмотр задач для вашей роли закрыт' })
+}

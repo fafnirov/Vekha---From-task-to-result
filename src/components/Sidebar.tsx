@@ -34,6 +34,7 @@ export function Sidebar() {
   }
 
   const renderItem = (item: NavItem) => {
+    if (item.needs && !can(item.needs)) return null
     const on = isActive(item, pathname)
     const count = item.count ? counts[item.count] : undefined
     return (

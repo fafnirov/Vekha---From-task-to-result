@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Avatar, Checkbox, Empty, Icon, Segmented, Toggle, UnderlineTabs } from '../components/ui'
+import { PasswordReset } from '../components/PasswordReset'
+import { Tooltip } from '../components/Tooltip'
 import { ROLE_LABEL } from '../data/catalog'
 import { api, BASE } from '../api/client'
 import {
@@ -1180,7 +1182,24 @@ function PeopleTab() {
   )
   const dropInvite = useApiMutation<string, unknown>((id) => api.del(`/api/invites/${id}`), ['invites'])
 
-  const GRID = '30px minmax(0,1fr) 180px 130px 110px'
+  /*
+   * Сброс пароля администратором. Почты в системе нет, поэтому «забыли
+   * пароль» работает так: админ выпускает временный пароль и передаёт его
+   * лично. Ответ показывается один раз — держим его в состоянии до
+   * закрытия окна.
+   */
+  const [reset, setReset] = useState<{
+    id: string
+    name: string
+    email: string
+    password: string | null
+  } | null>(null)
+  const resetPassword = useApiMutation<
+    { id: string },
+    { password: string; email: string; name: string }
+  >(({ id }) => api.post(`/api/people/${id}/password`, {}), ['people'])
+
+  const GRID = '30px minmax(0,1fr) 180px 130px 110px 36px'
 
   return (
     <div className="stack">
@@ -1191,6 +1210,7 @@ function PeopleTab() {
           <span>Почта</span>
           <span>Роль</span>
           <span>Активен</span>
+          <span />
         </div>
 
         {list.map((p) => (
@@ -1231,6 +1251,22 @@ function PeopleTab() {
                 void patchUser.mutateAsync({ id: p.id, body: { active: !p.active } }).catch(toastError)
               }
             />
+            {manage ? (
+              <Tooltip label="Сбросить пароль" hint="Выдаст временный — покажем один раз" side="left">
+                <button
+                  type="button"
+                  className="btn btn--icon-quiet"
+                  aria-label={`Сбросить пароль для ${p.name}`}
+                  onClick={() =>
+                    setReset({ id: p.id, name: p.name, email: p.email, password: null })
+                  }
+                >
+                  <Icon name="key" size={15} />
+                </button>
+              </Tooltip>
+            ) : (
+              <span />
+            )}
           </div>
         ))}
       </section>
@@ -1321,6 +1357,25 @@ function PeopleTab() {
             </div>
           )}
         </section>
+      )}
+
+      {reset && (
+        <PasswordReset
+          name={reset.name}
+          email={reset.email}
+          password={reset.password}
+          busy={resetPassword.isPending}
+          onConfirm={() =>
+            void resetPassword
+              .mutateAsync({ id: reset.id })
+              .then((r) => setReset({ ...reset, password: r.password }))
+              .catch((err) => {
+                setReset(null)
+                toastError(err)
+              })
+          }
+          onClose={() => setReset(null)}
+        />
       )}
     </div>
   )

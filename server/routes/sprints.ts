@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, require as requirePerm } from '../lib/auth.js'
+import { authenticate, require as requirePerm, requireTaskView } from '../lib/auth.js'
 import { personDto, sprintDto, taskDto, taskInclude } from '../lib/dto.js'
 import { record } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
@@ -18,6 +18,7 @@ const sprintInclude = {
 
 export async function sprintRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
+  app.addHook('preHandler', requireTaskView)
 
   app.get('/api/sprints', async (req) => {
     const p = z.object({ queue: z.string().optional(), state: z.string().optional() }).parse(req.query)

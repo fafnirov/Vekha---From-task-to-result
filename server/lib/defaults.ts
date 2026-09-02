@@ -49,12 +49,10 @@ export const DEFAULT_WORKFLOW = 'Разработка'
 export const DEFAULT_FIELDS = [
   { key: 'title', label: 'Заголовок', type: 'string', icon: 'title', screen: 'Все', required: true, onCard: true, system: true },
   { key: 'description', label: 'Описание', type: 'text', icon: 'description', screen: 'Все', required: false, onCard: false, system: true },
-  { key: 'assignee', label: 'Исполнитель', type: 'user', icon: 'person', screen: 'Все', required: true, onCard: true, system: true },
+  { key: 'assignee', label: 'Исполнитель', type: 'user', icon: 'person', screen: 'Все', required: false, onCard: true, system: true },
   { key: 'sprint', label: 'Спринт', type: 'sprint', icon: 'rotate_right', screen: 'Agile', required: false, onCard: true, system: true },
   { key: 'estimate', label: 'Оценка (SP)', type: 'number', icon: 'straighten', screen: 'Agile', required: false, onCard: true, system: true },
-  { key: 'component', label: 'Компонент', type: 'enum', icon: 'category', screen: 'Все', required: false, onCard: false, system: false },
   { key: 'dueDate', label: 'Дедлайн', type: 'date', icon: 'calendar_today', screen: 'Все', required: false, onCard: true, system: true },
-  { key: 'regression', label: 'Регресс проверен', type: 'boolean', icon: 'check_box', screen: 'QA', required: false, onCard: false, system: false },
 ] as const
 
 export const DEFAULT_BOARD_COLUMNS = [

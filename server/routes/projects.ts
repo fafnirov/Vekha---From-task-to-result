@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, require as requirePerm } from '../lib/auth.js'
+import { authenticate, require as requirePerm, requireTaskView } from '../lib/auth.js'
 import { milestoneDto, projectDto, taskDto, taskInclude } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
 import { PROJECT_PALETTE, PROJECT_STATES } from '../lib/constants.js'
@@ -46,7 +46,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     return rows.map((p, i) => projectDto(p, i, PROJECT_PALETTE))
   })
 
-  app.get('/api/projects/:name', async (req, reply) => {
+  app.get('/api/projects/:name', { preHandler: requireTaskView }, async (req, reply) => {
     const { name } = req.params as { name: string }
     const decoded = decodeURIComponent(name)
 

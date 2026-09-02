@@ -3,7 +3,9 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, require as requirePerm } from '../lib/auth.js'
+import { authenticate, hashPassword, require as requirePerm, requireTaskView } from '../lib/auth.js'
+import { randomBytes } from 'node:crypto'
+import { clearFailures } from '../lib/throttle.js'
 import { personDto, queueDto } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
 import { AVATAR_PALETTE, QUEUE_ACCESS, ROLES } from '../lib/constants.js'
@@ -60,7 +62,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   })
 
   /** Загрузка участника: открытые задачи, story points, просрочки. */
-  app.get('/api/people/:code', async (req, reply) => {
+  app.get('/api/people/:code', { preHandler: requireTaskView }, async (req, reply) => {
     const { code } = req.params as { code: string }
     const user = await prisma.user.findFirst({ where: { OR: [{ code }, { id: code }] } })
     if (!user) return reply.code(404).send({ error: 'Участник не найден' })
@@ -133,6 +135,39 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
     emitChanges(['people'])
     return personDto(user)
+  })
+
+  /**
+   * Сброс пароля администратором.
+   *
+   * Почты в системе нет, поэтому ссылку «забыли пароль» отправить некуда.
+   * Вместо этого админ выдаёт временный пароль: сервер генерирует его сам
+   * и показывает ровно один раз — в базе лежит только хеш, повторно
+   * подсмотреть пароль нельзя, можно лишь выпустить новый.
+   *
+   * Пароль придумывает сервер, а не админ: набранный руками «12345678»
+   * встречается слишком часто, чтобы оставлять эту возможность.
+   */
+  app.post('/api/people/:id/password', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'people.manage'))) return
+
+    const { id } = req.params as { id: string }
+    const target = await prisma.user.findUnique({ where: { id } })
+    if (!target) return reply.code(404).send({ error: 'Участник не найден' })
+
+    // 12 знаков base64url — около 72 бит энтропии.
+    const password = randomBytes(9).toString('base64url')
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash: await hashPassword(password) },
+    })
+
+    // Человека, который забыл пароль и исчерпал попытки, блокировка после
+    // сброса держать не должна.
+    clearFailures(target.email)
+
+    emitChanges(['people'])
+    return { password, email: target.email, name: target.name }
   })
 
   /* ── Очереди ──────────────────────────────────────────────────────── */

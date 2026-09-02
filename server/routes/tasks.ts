@@ -9,7 +9,8 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { atLeast, authenticate, can, canEditTask, require as requirePerm } from '../lib/auth.js'
+import { atLeast, authenticate, can, canEditTask, require as requirePerm, requireTaskView } from '../lib/auth.js'
+import { missingRequired, missingRequiredError, type FieldValues } from '../lib/fields.js'
 import { commentDto, historyDto, taskDto, taskInclude, linkLabel } from '../lib/dto.js'
 import { findMentions, notify, record, taskAudience, watch } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
@@ -138,6 +139,7 @@ async function syncTags(taskId: string, names: string[]): Promise<void> {
 
 export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
+  app.addHook('preHandler', requireTaskView)
 
   /* ── Список ───────────────────────────────────────────────────────── */
 
@@ -345,6 +347,19 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         })
       : null
 
+    // Обязательные поля проверяются до выдачи номера: иначе счётчик
+    // очереди израсходуется на попытку, которая не создаст задачу, и в
+    // ключах появятся дыры.
+    const gaps = await missingRequired({
+      title: body.title,
+      description: body.description,
+      assignee: assigneeId,
+      sprint: sprint?.id ?? null,
+      estimate: body.estimate ?? null,
+      dueDate: toDate(body.dueDate) ?? null,
+    })
+    if (gaps.length) return reply.code(422).send(missingRequiredError(gaps))
+
     // Номер выдаётся в транзакции, иначе два одновременных создания
     // получат один и тот же ключ.
     const num = await prisma.$transaction(async (tx) => {
@@ -454,6 +469,37 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (body.sprint !== undefined) {
       if (!(await requirePerm(req, reply, 'sprint.manage'))) return
     }
+
+    /*
+     * Обязательные поля: очистить объявленное обязательным нельзя.
+     * Проверка стоит до применения изменений — дальше по ходу обработки
+     * уже уходят подписки и уведомления, и отказ после них оставил бы
+     * следы правки, которой не было.
+     *
+     * Проверяются только поля, пришедшие в запросе: незаполненное
+     * обязательное поле у старой задачи не должно мешать править
+     * соседнее. Исполнитель и спринт разрешаются здесь повторно —
+     * пустым считается то, что не нашлось, а не то, что не прислали.
+     */
+    const touched: FieldValues = {}
+    if (body.title !== undefined) touched.title = body.title
+    if (body.description !== undefined) touched.description = body.description
+    if (body.dueDate !== undefined) touched.dueDate = toDate(body.dueDate) ?? null
+    if (body.estimate !== undefined) touched.estimate = body.estimate ?? null
+    if (body.assignee !== undefined) touched.assignee = await resolveUser(body.assignee)
+    if (body.sprint !== undefined) {
+      touched.sprint = body.sprint
+        ? (
+            await prisma.sprint.findFirst({
+              where: { OR: [{ id: body.sprint }, { name: body.sprint, queueId: task.queueId }] },
+              select: { id: true },
+            })
+          )?.id ?? null
+        : null
+    }
+
+    const gaps = await missingRequired(touched)
+    if (gaps.length) return reply.code(422).send(missingRequiredError(gaps))
 
     const data: Prisma.TaskUpdateInput = {}
     const events: { kind: string; note: string; from?: string; to?: string; field?: string }[] = []

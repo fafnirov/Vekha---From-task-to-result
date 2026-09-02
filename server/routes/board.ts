@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { atLeast, authenticate, can, require as requirePerm } from '../lib/auth.js'
+import { atLeast, authenticate, can, require as requirePerm, requireTaskView } from '../lib/auth.js'
 import { taskDto, taskInclude } from '../lib/dto.js'
 import { record, notify, taskAudience } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
@@ -22,6 +22,7 @@ function parseStatuses(raw: string): string[] {
 
 export async function boardRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
+  app.addHook('preHandler', requireTaskView)
 
   /**
    * Доска целиком. Колонка карточки определяется её статусом, поэтому

@@ -18,6 +18,7 @@ import { Filters } from './screens/Filters'
 import { Reports } from './screens/Reports'
 import { Workflow } from './screens/Workflow'
 import { Profile } from './screens/Profile'
+import { NoAccess } from './screens/NoAccess'
 import { useUi } from './store/ui'
 import { useSession } from './store/session'
 import { useApp } from './store/app'
@@ -25,7 +26,7 @@ import { useApp } from './store/app'
 export function App() {
   const ui = useUi()
   const { mobileNav, closeMobileNav } = useApp()
-  const { me, ready } = useSession()
+  const { me, ready, can } = useSession()
 
   // Пока проверяется сессия, экран остаётся пустым: мигание формой входа
   // при каждом обновлении страницы выглядит как ошибка.
@@ -42,6 +43,8 @@ export function App() {
     )
   }
 
+  const sees = can('task.view')
+
   return (
     <div className="shell">
       {mobileNav && <div className="shell__scrim" onClick={closeMobileNav} />}
@@ -50,16 +53,27 @@ export function App() {
         <TopBar />
         <main className="workspace">
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/tasks/:key" element={<TaskDetail />} />
-            <Route path="/board" element={<Board />} />
-            <Route path="/backlog" element={<Backlog />} />
+            {/*
+              Право «Просмотр задач» закрывает сразу несколько разделов.
+              Из меню они спрятаны, но по прямой ссылке дойти можно —
+              поэтому здесь стоит явная заглушка, а не пустой экран.
+            */}
+            <Route path="/" element={sees ? <Home /> : <NoAccess what="Сводка по задачам" />} />
+            <Route path="/tasks" element={sees ? <Tasks /> : <NoAccess what="Список задач" />} />
+            <Route
+              path="/tasks/:key"
+              element={sees ? <TaskDetail /> : <NoAccess what="Карточка задачи" />}
+            />
+            <Route path="/board" element={sees ? <Board /> : <NoAccess what="Доска" />} />
+            <Route path="/backlog" element={sees ? <Backlog /> : <NoAccess what="Планирование" />} />
             <Route path="/queues" element={<Queues />} />
             <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:name" element={<ProjectDetail />} />
-            <Route path="/filters" element={<Filters />} />
-            <Route path="/reports" element={<Reports />} />
+            <Route
+              path="/projects/:name"
+              element={sees ? <ProjectDetail /> : <NoAccess what="Карточка проекта" />}
+            />
+            <Route path="/filters" element={sees ? <Filters /> : <NoAccess what="Фильтры" />} />
+            <Route path="/reports" element={sees ? <Reports /> : <NoAccess what="Отчёты" />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/workflow" element={<Workflow />} />
             <Route path="/profile" element={<Profile />} />
