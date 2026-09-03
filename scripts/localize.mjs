@@ -10,6 +10,13 @@
  * Скрипт идемпотентен — второй запуск ничего не находит и ничего не
  * делает.
  *
+ * Он умеет не только переименовывать, но и сливать. Это обязательно:
+ * при старте сервера bootstrap досоздаёт недостающие записи по имени,
+ * поэтому после выкатки нового кода рядом со старым «Баг» появляется
+ * новая «Ошибка». Простое переименование упёрлось бы в уникальность
+ * имени, а слияние переносит задачи на уцелевшую запись и удаляет
+ * лишнюю.
+ *
  * Историю задач он не переписывает намеренно. В ней записано, что
  * когда-то произошло: «статус New → Open». Задним числом подменить эти
  * записи значит соврать о прошлом ради единообразия подписей.
@@ -45,7 +52,11 @@ const SCREEN = { Agile: 'Планирование' }
 const FIELD_LABEL = { 'Оценка (SP)': 'Оценка, баллы', Дедлайн: 'Срок' }
 
 /** Имена шаблонов задач. */
-const TEMPLATE = { 'Чек-лист выпуска': 'Контрольный список выпуска', Баг: 'Ошибка' }
+const TEMPLATE = {
+  Баг: 'Ошибка',
+  'Чек-лист выпуска': 'Контрольный список выпуска',
+  'Релизный чек-лист': 'Контрольный список выпуска',
+}
 
 const PRIORITY = {
   Critical: 'Критический',
@@ -60,6 +71,35 @@ const planned = []
 
 function note(what, from, to) {
   planned.push(`  ${what}: «${from}» → «${to}»`)
+}
+
+/**
+ * Готовит переименования для справочника с уникальным именем.
+ *
+ * Если целевое имя уже занято другой записью — это не ошибка, а
+ * дубликат, оставленный bootstrap. Такую пару отправляем в слияние:
+ * ссылки переносятся на уцелевшую запись, лишняя удаляется.
+ */
+function planRenames(rows, dict) {
+  const byName = new Map(rows.map((r) => [r.name, r]))
+  const renames = []
+  const merges = []
+  for (const row of rows) {
+    const target = dict[row.name]
+    if (!target || target === row.name) continue
+    const clash = byName.get(target)
+    if (clash && clash.id !== row.id) {
+      merges.push({ from: row, to: clash })
+      continue
+    }
+    // Первая запись, занимающая целевое имя, переименовывается; все
+    // следующие с тем же именем сливаются в неё. Иначе два источника,
+    // ведущие к одному имени, дали бы две одинаковые записи —
+    // у шаблонов имя не уникально, и база их молча пропустила бы.
+    renames.push({ id: row.id, from: row.name, to: target })
+    byName.set(target, row)
+  }
+  return { renames, merges }
 }
 
 /** Замена целых слов в строке запроса или правила. */
@@ -101,13 +141,19 @@ try {
   }
 
   /* ── Типы задач и резолюции ───────────────────────────────────────── */
-  const types = await prisma.taskType.findMany({ select: { id: true, name: true } })
-  const typeJobs = types.filter((t) => TYPE[t.name])
-  for (const t of typeJobs) note('тип задачи', t.name, TYPE[t.name])
+  const types = planRenames(
+    await prisma.taskType.findMany({ select: { id: true, name: true } }),
+    TYPE,
+  )
+  for (const t of types.renames) note('тип задачи', t.from, t.to)
+  for (const m of types.merges) note('тип задачи, слияние', m.from.name, TYPE[m.to.name] ?? m.to.name)
 
-  const resolutions = await prisma.resolution.findMany({ select: { id: true, name: true } })
-  const resolutionJobs = resolutions.filter((r) => RESOLUTION[r.name])
-  for (const r of resolutionJobs) note('резолюция', r.name, RESOLUTION[r.name])
+  const resolutions = planRenames(
+    await prisma.resolution.findMany({ select: { id: true, name: true } }),
+    RESOLUTION,
+  )
+  for (const r of resolutions.renames) note('резолюция', r.from, r.to)
+  for (const m of resolutions.merges) note('резолюция, слияние', m.from.name, RESOLUTION[m.to.name] ?? m.to.name)
 
   /* ── Экран поля и шаблоны ─────────────────────────────────────────── */
   const fields = await prisma.taskField.findMany({ select: { id: true, label: true, screen: true } })
@@ -124,9 +170,12 @@ try {
     if (f.screen !== f.was.screen) note(`поле «${f.label}», экран`, f.was.screen, f.screen)
   }
 
-  const templates = await prisma.taskTemplate.findMany({ select: { id: true, name: true } })
-  const templateJobs = templates.filter((t) => TEMPLATE[t.name])
-  for (const t of templateJobs) note('шаблон', t.name, TEMPLATE[t.name])
+  const templates = planRenames(
+    await prisma.taskTemplate.findMany({ select: { id: true, name: true } }),
+    TEMPLATE,
+  )
+  for (const t of templates.renames) note('шаблон', t.from, t.to)
+  for (const m of templates.merges) note('шаблон, слияние', m.from.name, TEMPLATE[m.to.name] ?? m.to.name)
 
   /* ── Сохранённые фильтры ──────────────────────────────────────────── */
   const filters = await prisma.savedFilter.findMany({ select: { id: true, name: true, query: true } })
@@ -152,7 +201,13 @@ try {
   }
 
   /* ── Отчёт и применение ───────────────────────────────────────────── */
-  if (planned.length === 0) {
+  const hasWork =
+    planned.length > 0 ||
+    types.merges.length > 0 ||
+    resolutions.merges.length > 0 ||
+    templates.merges.length > 0
+
+  if (!hasWork) {
     console.log('Переводить нечего — всё уже по-русски.')
     process.exit(0)
   }
@@ -165,7 +220,37 @@ try {
     process.exit(0)
   }
 
+  /*
+   * Порядок важен. Слияния идут первыми и целиком: сначала задачи
+   * переносятся на уцелевшую запись, только потом лишняя удаляется —
+   * иначе связь оборвалась бы. Переименования после них, когда
+   * занятые имена уже освободились.
+   */
   await prisma.$transaction([
+    ...types.merges.flatMap((m) => [
+      prisma.task.updateMany({ where: { typeId: m.from.id }, data: { typeId: m.to.id } }),
+      prisma.taskType.delete({ where: { id: m.from.id } }),
+    ]),
+    ...resolutions.merges.flatMap((m) => [
+      prisma.task.updateMany({
+        where: { resolutionId: m.from.id },
+        data: { resolutionId: m.to.id },
+      }),
+      prisma.resolution.delete({ where: { id: m.from.id } }),
+    ]),
+    // У шаблона нет связанных задач: он лишь заготовка для новой.
+    ...templates.merges.map((m) => prisma.taskTemplate.delete({ where: { id: m.from.id } })),
+
+    ...types.renames.map((t) =>
+      prisma.taskType.update({ where: { id: t.id }, data: { name: t.to } }),
+    ),
+    ...resolutions.renames.map((r) =>
+      prisma.resolution.update({ where: { id: r.id }, data: { name: r.to } }),
+    ),
+    ...templates.renames.map((t) =>
+      prisma.taskTemplate.update({ where: { id: t.id }, data: { name: t.to } }),
+    ),
+
     ...statusJobs.map((s) =>
       prisma.status.update({ where: { id: s.id }, data: { name: STATUS[s.name] } }),
     ),
@@ -175,17 +260,8 @@ try {
         data: { name: c.name, statuses: c.statuses },
       }),
     ),
-    ...typeJobs.map((t) =>
-      prisma.taskType.update({ where: { id: t.id }, data: { name: TYPE[t.name] } }),
-    ),
-    ...resolutionJobs.map((r) =>
-      prisma.resolution.update({ where: { id: r.id }, data: { name: RESOLUTION[r.name] } }),
-    ),
     ...fieldJobs.map((f) =>
       prisma.taskField.update({ where: { id: f.id }, data: { label: f.label, screen: f.screen } }),
-    ),
-    ...templateJobs.map((t) =>
-      prisma.taskTemplate.update({ where: { id: t.id }, data: { name: TEMPLATE[t.name] } }),
     ),
     ...filterJobs.map((f) =>
       prisma.savedFilter.update({ where: { id: f.id }, data: { query: f.query } }),
