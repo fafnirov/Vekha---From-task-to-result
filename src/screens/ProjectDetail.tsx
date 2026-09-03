@@ -115,7 +115,7 @@ export function ProjectDetail() {
           tone={tasks.some((t) => t.statusCategory === 'blocked') ? 'var(--dang)' : undefined}
         />
         <Stat
-          label="Story points"
+          label="Оценка, баллы"
           value={String(tasks.reduce((sum, t) => sum + t.est, 0))}
           note="в проекте"
         />
@@ -270,7 +270,7 @@ export function ProjectDetail() {
             <Empty
               icon="timeline"
               title="Нечего показать"
-              text="Диаграмма строится по задачам с дедлайнами и по вехам проекта."
+              text="Диаграмма строится по задачам с сроками и по вехам проекта."
             />
           ) : (
             <div style={{ minWidth: 720 }}>

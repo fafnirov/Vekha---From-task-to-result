@@ -670,7 +670,7 @@ export function TaskDetail() {
                 rows={3}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Написать комментарий. Упоминание через @ — например @dmitry"
+                placeholder="Написать комментарий. Упоминание через @ — например @ГА"
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault()
@@ -794,17 +794,17 @@ export function TaskDetail() {
             </div>
           </Field>
 
-          <Field label="Дедлайн">
+          <Field label="Срок">
             <input
               className="input"
               type="date"
               disabled={!editable}
               value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-              onChange={(e) => void patch({ dueDate: e.target.value || null }, 'Дедлайн изменён')}
+              onChange={(e) => void patch({ dueDate: e.target.value || null }, 'Срок изменён')}
             />
           </Field>
 
-          <Field label="Оценка, SP">
+          <Field label="Оценка, баллы">
             <input
               className="input"
               type="number"
@@ -841,7 +841,7 @@ export function TaskDetail() {
               disabled={!can('sprint.manage')}
               onChange={(e) => void patch({ sprint: e.target.value || null }, 'Спринт изменён')}
             >
-              <option value="">Бэклог</option>
+              <option value="">Без спринта</option>
               {(sprints.data ?? [])
                 .filter((s) => s.queue === task.queue)
                 .map((s) => (
@@ -867,7 +867,7 @@ export function TaskDetail() {
             </span>
           </Field>
 
-          <Field label="Теги">
+          <Field label="Метки">
             <div className="tagline tagline--tight">
               {task.tags.length === 0 && <span style={{ fontSize: 12, color: 'var(--tx3)' }}>—</span>}
               {task.tags.map((t) => (

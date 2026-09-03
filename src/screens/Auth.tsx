@@ -150,7 +150,7 @@ export function Auth() {
                 className="input"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                placeholder="Product Lead"
+                placeholder="Например: руководитель продукта"
                 autoComplete="organization-title"
               />
             </label>

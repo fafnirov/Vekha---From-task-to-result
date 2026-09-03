@@ -50,10 +50,10 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     /* ── Распределение по статусам ──────────────────────────────────── */
 
     const buckets = [
-      { label: 'Done', c: 'var(--ok)', match: (c: string) => c === 'done' },
-      { label: 'In Progress', c: 'var(--ac)', match: (c: string) => c === 'inprogress' },
-      { label: 'Blocked', c: 'var(--dang)', match: (c: string) => c === 'blocked' },
-      { label: 'Open / New', c: 'var(--info)', match: (c: string) => c === 'todo' },
+      { label: 'Готово', c: 'var(--ok)', match: (c: string) => c === 'done' },
+      { label: 'В работе', c: 'var(--ac)', match: (c: string) => c === 'inprogress' },
+      { label: 'Заблокировано', c: 'var(--dang)', match: (c: string) => c === 'blocked' },
+      { label: 'Ждёт', c: 'var(--info)', match: (c: string) => c === 'todo' },
     ]
     const statusSplit = buckets
       .map((b) => ({

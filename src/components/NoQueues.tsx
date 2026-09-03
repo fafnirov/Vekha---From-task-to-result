@@ -21,7 +21,7 @@ export function NoQueues({ what }: { what: 'задачу' | 'проект' }) {
       <div style={{ fontSize: 14, fontWeight: 600 }}>Сначала нужна очередь</div>
 
       <p className="no-queues__text">
-        Очередь — контейнер задач со своим воркфлоу и правами. Её ключ
+        Очередь — контейнер задач со своей схемой работы и правами. Её ключ
         подставляется в номера задач: очередь <span className="mono">KAVO</span> даёт{' '}
         <span className="mono">KAVO-1</span>, <span className="mono">KAVO-2</span> и так
         далее. Пока нет ни одной очереди, создать {what} некуда.

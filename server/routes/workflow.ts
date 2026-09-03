@@ -146,7 +146,7 @@ export async function workflowRoutes(app: FastifyInstance): Promise<void> {
       prisma.status.findFirst({ where: { workflowId: id, OR: [{ id: parsed.data.from }, { name: parsed.data.from }] } }),
       prisma.status.findFirst({ where: { workflowId: id, OR: [{ id: parsed.data.to }, { name: parsed.data.to }] } }),
     ])
-    if (!from || !to) return reply.code(400).send({ error: 'Статус не найден в этом воркфлоу' })
+    if (!from || !to) return reply.code(400).send({ error: 'Статус не найден в этой схеме' })
     if (from.id === to.id) return reply.code(400).send({ error: 'Переход в тот же статус' })
 
     await prisma.transition.upsert({
@@ -581,16 +581,16 @@ const TRIGGER_LABEL: Record<string, string> = {
 }
 
 const FIELD_LABEL: Record<string, string> = {
-  status: 'status',
-  category: 'category',
-  priority: 'priority',
-  queue: 'queue',
-  project: 'project',
-  assignee: 'assignee',
-  tags: 'tag',
-  overdue: 'deadline < now()',
-  subtasksAllDone: 'все подзадачи Done',
-  estimate: 'estimate',
+  status: 'статус',
+  category: 'категория',
+  priority: 'приоритет',
+  queue: 'очередь',
+  project: 'проект',
+  assignee: 'исполнитель',
+  tags: 'метка',
+  overdue: 'срок просрочен',
+  subtasksAllDone: 'все подзадачи закрыты',
+  estimate: 'оценка',
 }
 
 interface Clause {
@@ -609,7 +609,7 @@ function describeCondition(raw: string): string {
       const label = FIELD_LABEL[c.field] ?? c.field
       if (c.field === 'overdue' || c.field === 'subtasksAllDone') return label
       const value = Array.isArray(c.value) ? c.value.join(', ') : String(c.value)
-      const op = c.op === 'neq' ? '≠' : c.op === 'in' ? 'in' : c.op === 'contains' ? '∋' : '='
+      const op = c.op === 'neq' ? '≠' : c.op === 'in' ? 'из' : c.op === 'contains' ? '∋' : '='
       return `${label} ${op} ${value}`
     })
     .join(parsed.any?.length ? ' или ' : ' и ')
@@ -629,13 +629,13 @@ const AUDIENCE_LABEL: Record<string, string> = {
 const ACTION_LABEL: Record<string, (value?: string, role?: string) => string> = {
   notify: (value, role) =>
     role ? `Уведомить ${AUDIENCE_LABEL[role] ?? role}` : (value ?? 'Уведомить'),
-  set_priority: (value) => `priority → ${value ?? 'High'}`,
-  raise_priority: (value) => `priority ↑ до ${value ?? 'High'}`,
-  set_status: (value) => `status → ${value ?? 'Done'}`,
-  set_assignee: (value) => `assignee → ${value ?? '—'}`,
+  set_priority: (value) => `Приоритет → ${value ?? 'Высокий'}`,
+  raise_priority: (value) => `Приоритет ↑ до ${value ?? 'Высокий'}`,
+  set_status: (value) => `Статус → ${value ?? 'Готово'}`,
+  set_assignee: (value) => `Исполнитель → ${value ?? '—'}`,
   add_comment: () => 'Добавить комментарий',
   add_watcher: (value) => `Наблюдатель → ${value ?? '—'}`,
-  add_tag: (value) => `Тег → ${value ?? '—'}`,
+  add_tag: (value) => `Метка → ${value ?? '—'}`,
 }
 
 function describeActions(raw: string): string {

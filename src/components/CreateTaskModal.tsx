@@ -48,7 +48,7 @@ export function CreateTaskModal() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [assignee, setAssignee] = useState('')
-  const [priority, setPriority] = useState<PriorityName>('Medium')
+  const [priority, setPriority] = useState<PriorityName>('Средний')
   const [dueDate, setDueDate] = useState('')
   const [estimate, setEstimate] = useState('')
   const [project, setProject] = useState('')
@@ -285,7 +285,7 @@ export function CreateTaskModal() {
               </select>
             </label>
             <label className="label">
-              <span>Дедлайн{star('dueDate')}</span>
+              <span>Срок{star('dueDate')}</span>
               <input
                 className="input"
                 type="date"
@@ -310,7 +310,7 @@ export function CreateTaskModal() {
             <label className="label">
               <span>Спринт{star('sprint')}</span>
               <select className="select" value={sprint} onChange={(e) => setSprint(e.target.value)}>
-                <option value="">Бэклог</option>
+                <option value="">Без спринта</option>
                 {queueSprints.map((s) => (
                   <option key={s.id} value={s.name}>
                     {s.name}
@@ -319,7 +319,7 @@ export function CreateTaskModal() {
               </select>
             </label>
             <label className="label">
-              <span>Оценка, SP{star('estimate')}</span>
+              <span>Оценка, баллы{star('estimate')}</span>
               <input
                 className="input"
                 type="number"
@@ -333,7 +333,7 @@ export function CreateTaskModal() {
           </div>
 
           <div className="tagline">
-            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Теги</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Метки</span>
             {tags.map((t) => (
               <span key={t} className="tag">
                 {t}
@@ -341,7 +341,7 @@ export function CreateTaskModal() {
                   type="button"
                   className="chip__x"
                   onClick={() => setTags(tags.filter((x) => x !== t))}
-                  aria-label={`Убрать тег ${t}`}
+                  aria-label={`Убрать метка ${t}`}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -358,7 +358,7 @@ export function CreateTaskModal() {
                 }
               }}
               onBlur={addTag}
-              placeholder="+ тег"
+              placeholder="+ метка"
             />
           </div>
 

@@ -41,8 +41,8 @@ type SortKey =
 const OPTIONAL_COLS = {
   project: 'Проект',
   sprint: 'Спринт',
-  due: 'Дедлайн',
-  est: 'SP',
+  due: 'Срок',
+  est: 'Оценка',
 } as const
 
 type OptionalCol = keyof typeof OPTIONAL_COLS
@@ -58,7 +58,7 @@ const CHIP_LABEL: Record<string, string> = {
   assignee: 'Исполнитель:',
   project: 'Проект:',
   sprint: 'Спринт:',
-  tag: 'Тег:',
+  tag: 'Метка:',
   q: 'Запрос:',
 }
 
@@ -254,8 +254,8 @@ export function Tasks() {
       { label: 'Исп.', k: 'who', just: 'center' },
       { label: 'Проект', k: 'project', optional: 'project' },
       { label: 'Спринт', k: 'sprint', optional: 'sprint' },
-      { label: 'Дедлайн', k: 'due', optional: 'due' },
-      { label: 'SP', k: 'est', just: 'flex-end', optional: 'est' },
+      { label: 'Срок', k: 'due', optional: 'due' },
+      { label: 'Оценка', k: 'est', just: 'flex-end', optional: 'est' },
     ]
     return all.filter((c) => !c.optional || cols[c.optional])
   }, [cols])
@@ -471,7 +471,7 @@ export function Tasks() {
                 icon="rotate_right"
                 label="В спринт"
                 options={[
-                  { value: '', label: 'Вернуть в бэклог' },
+                  { value: '', label: 'Убрать из спринта' },
                   ...(sprints.data ?? [])
                     .filter((s) => s.state !== 'closed')
                     .map((s) => ({ value: s.name, label: s.name })),
@@ -717,7 +717,7 @@ function FilterPicker({
     { key: 'queue', label: 'Очередь', values: queues },
     { key: 'status', label: 'Статус', values: statuses },
     { key: 'sprint', label: 'Спринт', values: sprints },
-    { key: 'tag', label: 'Тег', values: tags.slice(0, 12) },
+    { key: 'tag', label: 'Метка', values: tags.slice(0, 12) },
   ]
 
   return (

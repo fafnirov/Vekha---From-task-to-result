@@ -31,8 +31,8 @@ const notificationInclude = {
 const REASONS = {
   overdue: { reason: 'просрочено', icon: 'schedule', bg: 'var(--dang-bg)', fg: 'var(--dang)', bar: 'var(--dang)' },
   blocked: { reason: 'blocked', icon: 'block', bg: 'var(--dang-bg)', fg: 'var(--dang)', bar: 'var(--dang)' },
-  today: { reason: 'дедлайн сегодня', icon: 'today', bg: 'var(--warn-bg)', fg: 'var(--warn)', bar: 'var(--warn)' },
-  soon: { reason: 'дедлайн близко', icon: 'event', bg: 'var(--warn-bg)', fg: 'var(--warn)', bar: 'var(--warn)' },
+  today: { reason: 'срок сегодня', icon: 'today', bg: 'var(--warn-bg)', fg: 'var(--warn)', bar: 'var(--warn)' },
+  soon: { reason: 'срок близко', icon: 'event', bg: 'var(--warn-bg)', fg: 'var(--warn)', bar: 'var(--warn)' },
   mention: { reason: 'упоминание', icon: 'alternate_email', bg: 'var(--ac-soft)', fg: 'var(--ac-tx)', bar: 'var(--ac)' },
   review: { reason: 'ждёт решения', icon: 'rate_review', bg: 'var(--ac-soft)', fg: 'var(--ac-tx)', bar: 'var(--ac)' },
   noassignee: { reason: 'без исполнителя', icon: 'person_off', bg: 'var(--n-bg)', fg: 'var(--tx2)', bar: 'var(--border2)' },
@@ -188,7 +188,10 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
         if (t) push(key, 'mention', relativeTime(t.updatedAt, now))
       }
       for (const t of allOpen) {
-        if (t.status.name === 'Review' && t.assigneeId === me.id) {
+        // Проверка отличается от прочей работы только именем статуса:
+        // категория у них общая. Переименуете статус в настройках —
+        // блок «ждёт решения» перестанет его замечать.
+        if (t.status.name === 'На проверке' && t.assigneeId === me.id) {
           push(t.key, 'review', relativeTime(t.updatedAt, now))
         }
       }
@@ -203,7 +206,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
 
       const overdueCount = allOpen.filter((t) => t.dueDate && t.dueDate < today).length
       const myOverdue = myTasks.filter((t) => t.dueDate && t.dueDate < today).length
-      const reviewCount = allOpen.filter((t) => t.status.name === 'Review').length
+      const reviewCount = allOpen.filter((t) => t.status.name === 'На проверке').length
       const blockedCount = allOpen.filter((t) => t.status.category === 'blocked').length
 
       return {
@@ -216,7 +219,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
             icon: 'assignment_ind',
           },
           {
-            label: 'На ревью',
+            label: 'На проверке',
             value: reviewCount,
             note: 'по всей организации',
             fg: 'var(--warn)',
@@ -232,7 +235,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
           {
             label: 'Просрочено',
             value: overdueCount,
-            note: 'дедлайн в прошлом',
+            note: 'срок в прошлом',
             fg: overdueCount ? 'var(--dang)' : 'var(--ok)',
             icon: 'schedule',
           },

@@ -42,6 +42,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
     doneSince.setDate(doneSince.getDate() - p.doneDays)
 
     const columns = await prisma.boardColumn.findMany({ orderBy: { order: 'asc' } })
+    const allStatuses = await prisma.status.findMany({ select: { name: true, category: true } })
     const tasks = await prisma.task.findMany({
       where: {
         ...taskScope(req.user!),
@@ -62,9 +63,19 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
     const byColumn = new Map<string, ReturnType<typeof taskDto>[]>()
     for (const c of columns) byColumn.set(c.name, [])
 
-    // Статус, не попавший ни в одну колонку (например Blocked), показывается
-    // в колонке «В работе», иначе карточка пропала бы с доски.
-    const fallback = columns.find((c) => parseStatuses(c.statuses).includes('In Progress'))
+    /*
+     * Статус, не попавший ни в одну колонку, показывается в колонке
+     * «в работе», иначе карточка пропала бы с доски. Колонка ищется по
+     * категории входящих в неё статусов, а не по своему имени: имена
+     * колонок и статусов правятся в настройках, и привязка к строчке
+     * ломалась при первом же переименовании.
+     */
+    const inProgressNames = new Set(
+      allStatuses.filter((s) => s.category === 'inprogress').map((s) => s.name),
+    )
+    const fallback =
+      columns.find((c) => parseStatuses(c.statuses).some((n) => inProgressNames.has(n))) ??
+      columns[0]
 
     for (const task of tasks) {
       const column =
@@ -140,7 +151,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       if (!target) {
         return reply
           .code(422)
-          .send({ error: 'В воркфлоу очереди нет статуса для этой колонки' })
+          .send({ error: 'В схеме очереди нет статуса для этой колонки' })
       }
 
       const transition = await prisma.transition.findUnique({
@@ -149,7 +160,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       if (!transition) {
         return reply
           .code(422)
-          .send({ error: `Переход ${task.status.name} → ${target.name} не разрешён воркфлоу` })
+          .send({ error: `Переход ${task.status.name} → ${target.name} не разрешён схемой работы` })
       }
       // Та же проверка роли, что и на карточке задачи.
       if (

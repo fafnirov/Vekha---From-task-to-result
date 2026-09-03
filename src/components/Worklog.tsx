@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { points } from '../data/catalog'
 import { Avatar, Icon } from './ui'
 import { api } from '../api/client'
 import { useApiMutation, useInvalidate } from '../api/hooks'
@@ -99,7 +100,7 @@ export function Worklog({
         <div className="card__title">Затраченное время</div>
         <span className="count-pill mono">{formatMinutes(total)}</span>
         {hasEstimate && (
-          <span style={{ fontSize: 11, color: 'var(--tx3)' }}>оценка {estimate} SP</span>
+          <span style={{ fontSize: 11, color: 'var(--tx3)' }}>оценка {points(estimate)}</span>
         )}
         <button type="button" className="btn btn--link spacer" onClick={() => setOpen(!open)}>
           {open ? 'Свернуть' : 'Списать время'}

@@ -136,7 +136,7 @@ export function taskDto(t: TaskRow, now = new Date()): TaskDto {
     resolution: t.resolution?.name ?? null,
     resolutionId: t.resolutionId,
     resolutionKind: t.resolution?.kind ?? null,
-    priority: PRIORITY_LABEL[t.priority as Priority] ?? 'Medium',
+    priority: PRIORITY_LABEL[t.priority as Priority] ?? 'Средний',
     priorityKey: t.priority,
     who: t.assignee?.code ?? null,
     assigneeId: t.assigneeId,
@@ -338,10 +338,10 @@ const ACTIVITY_STYLE: Record<string, { icon: string; bg: string; fg: string }> =
 
 /** Цвет плашки «стало» повторяет палитру соответствующей сущности. */
 const VALUE_TONE: Record<string, { bg: string; fg: string }> = {
-  Critical: { bg: 'var(--dang-bg)', fg: 'var(--dang)' },
-  High: { bg: 'var(--warn-bg)', fg: 'var(--warn)' },
-  Medium: { bg: 'var(--info-bg)', fg: 'var(--info)' },
-  Low: { bg: 'var(--n-bg)', fg: 'var(--tx2)' },
+  Критический: { bg: 'var(--dang-bg)', fg: 'var(--dang)' },
+  Высокий: { bg: 'var(--warn-bg)', fg: 'var(--warn)' },
+  Средний: { bg: 'var(--info-bg)', fg: 'var(--info)' },
+  Низкий: { bg: 'var(--n-bg)', fg: 'var(--tx2)' },
 }
 
 export type ActivityRow = Prisma.ActivityGetPayload<{
@@ -392,7 +392,7 @@ const NOTIFY_STYLE: Record<string, { icon: string; icFg: string; kind: string }>
   status: { icon: 'sync_alt', icFg: 'var(--ac)', kind: 'статус' },
   assigned: { icon: 'person_add', icFg: 'var(--info)', kind: 'назначение' },
   link: { icon: 'block', icFg: 'var(--dang)', kind: 'связь' },
-  review: { icon: 'rate_review', icFg: 'var(--warn)', kind: 'ревью' },
+  review: { icon: 'rate_review', icFg: 'var(--warn)', kind: 'проверка' },
   watch: { icon: 'visibility', icFg: 'var(--tx3)', kind: 'наблюдение' },
 }
 

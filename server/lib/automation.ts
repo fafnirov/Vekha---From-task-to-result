@@ -233,7 +233,7 @@ async function runAction(ruleName: string, taskId: string, action: Action): Prom
       })
       if (!allowed) {
         console.warn(
-          `Правило «${ruleName}»: переход ${task.status.name} → ${next.name} не разрешён воркфлоу`,
+          `Правило «${ruleName}»: переход ${task.status.name} → ${next.name} не разрешён схемой работы`,
         )
         return false
       }
@@ -415,7 +415,7 @@ export async function runRules(trigger: Trigger, taskId: string): Promise<void> 
 }
 
 /**
- * Ежедневный прогон правил с триггером `schedule`: просроченные дедлайны,
+ * Ежедневный прогон правил с триггером `schedule`: просроченные сроки,
  * напоминания и всё, что не привязано к действию пользователя.
  */
 export async function runScheduledRules(): Promise<number> {

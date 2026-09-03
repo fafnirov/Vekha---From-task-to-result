@@ -46,6 +46,6 @@ export const CRUMBS: Record<string, string> = {
 export const SEARCH_NAV = [
   { label: 'Открыть доску команды', icon: 'view_kanban', kb: 'B', to: '/board' },
   { label: 'Планирование спринта', icon: 'rotate_right', kb: 'S', to: '/backlog' },
-  { label: 'Настройки воркфлоу', icon: 'account_tree', kb: 'W', to: '/workflow' },
+  { label: 'Настройки схемы', icon: 'account_tree', kb: 'W', to: '/workflow' },
   { label: 'Отчёты и метрики', icon: 'monitoring', kb: 'R', to: '/reports' },
 ]

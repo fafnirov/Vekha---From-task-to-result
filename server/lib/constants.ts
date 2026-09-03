@@ -21,15 +21,24 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const PRIORITIES = ['critical', 'high', 'medium', 'low'] as const
 export type Priority = (typeof PRIORITIES)[number]
 
-/** Имена приоритетов в том виде, в котором их ждёт дизайн-система. */
+/** Показываемые имена приоритетов. */
 export const PRIORITY_LABEL: Record<Priority, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
+  critical: 'Критический',
+  high: 'Высокий',
+  medium: 'Средний',
+  low: 'Низкий',
 }
 
+/**
+ * Разбор имени приоритета. Английские написания оставлены нарочно:
+ * по ним могли быть сохранены фильтры и правила автоматизации, и
+ * переименование не должно их ломать.
+ */
 export const PRIORITY_FROM_LABEL: Record<string, Priority> = {
+  Критический: 'critical',
+  Высокий: 'high',
+  Средний: 'medium',
+  Низкий: 'low',
   Critical: 'critical',
   High: 'high',
   Medium: 'medium',
@@ -93,7 +102,7 @@ export const PERMISSION_KEYS = [
   { key: 'task.status', label: 'Изменение статуса' },
   { key: 'task.editForeign', label: 'Редактирование чужих задач' },
   { key: 'sprint.manage', label: 'Управление спринтами' },
-  { key: 'workflow.manage', label: 'Настройка воркфлоу' },
+  { key: 'workflow.manage', label: 'Настройка схемы' },
   { key: 'task.delete', label: 'Удаление задач' },
   { key: 'people.manage', label: 'Управление участниками' },
 ] as const

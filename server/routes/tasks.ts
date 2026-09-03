@@ -325,7 +325,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const status =
       queue.workflow.statuses.find((s) => s.name === body.status) ??
       queue.workflow.statuses[0]
-    if (!status) return reply.code(400).send({ error: 'У воркфлоу очереди нет статусов' })
+    if (!status) return reply.code(400).send({ error: 'У схемы очереди нет статусов' })
 
     const assigneeId = (await resolveUser(body.assignee)) ?? null
     const project = body.project
@@ -510,7 +510,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const next = await prisma.status.findFirst({
         where: { workflowId: task.queue.workflowId, name: body.status },
       })
-      if (!next) return reply.code(400).send({ error: 'Такого статуса нет в воркфлоу очереди' })
+      if (!next) return reply.code(400).send({ error: 'Такого статуса нет в схеме очереди' })
 
       const transition = await prisma.transition.findUnique({
         where: { fromId_toId: { fromId: task.statusId, toId: next.id } },
@@ -518,7 +518,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (!transition) {
         return reply
           .code(422)
-          .send({ error: `Переход ${task.status.name} → ${next.name} не разрешён воркфлоу` })
+          .send({ error: `Переход ${task.status.name} → ${next.name} не разрешён схемой работы` })
       }
       // Роль перехода из настроек воркфлоу: раньше она только отображалась.
       if (
@@ -681,7 +681,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const same = next?.getTime() === task.dueDate?.getTime()
       if (!same) {
         data.dueDate = next
-        events.push({ kind: 'due', field: 'dueDate', note: 'изменил(а) дедлайн' })
+        events.push({ kind: 'due', field: 'dueDate', note: 'изменил(а) срок' })
       }
     }
 
@@ -1078,7 +1078,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
     const queue = item.task.queue
     const status = queue.workflow.statuses[0]
-    if (!status) return reply.code(400).send({ error: 'У воркфлоу очереди нет статусов' })
+    if (!status) return reply.code(400).send({ error: 'У схемы очереди нет статусов' })
 
     const num = await prisma.$transaction(async (tx) => {
       const updated = await tx.queue.update({

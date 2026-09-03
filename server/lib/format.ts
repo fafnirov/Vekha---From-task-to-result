@@ -36,7 +36,7 @@ const MONTHS_LONG = [
 
 export const DASH = '—'
 
-/** Полночь по локальному времени — база для сравнения дедлайнов. */
+/** Полночь по локальному времени — база для сравнения сроков. */
 export function startOfDay(d: Date): Date {
   const x = new Date(d)
   x.setHours(0, 0, 0, 0)
@@ -68,7 +68,7 @@ export function smartDate(d: Date | null | undefined, now = new Date()): string 
 }
 
 /**
- * Состояние дедлайна для подсветки строки: просрочен, истекает сегодня
+ * Состояние срока для подсветки строки: просрочен, истекает сегодня
  * или обычный. Закрытые задачи никогда не считаются просроченными.
  */
 export function dueState(

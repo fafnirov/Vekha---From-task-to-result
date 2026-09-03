@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, PriorityChip, Tag } from '../components/ui'
-import { priorityStyle, statusStyle } from '../data/catalog'
+import { points, priorityStyle, statusStyle } from '../data/catalog'
 import { useBoard, useMoveCard, useQueues, useSprints, useWorkflows } from '../api/hooks'
 import { ApiError } from '../api/client'
 import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
@@ -278,7 +278,7 @@ export function Board() {
           </button>
           <button type="button" className="btn btn--secondary" onClick={() => nav('/backlog')}>
             <Icon name="rotate_right" size={16} />
-            Бэклог
+            Планирование
           </button>
           <button type="button" className="btn btn--primary" onClick={ui.openCreateModal}>
             <Icon name="add" size={16} />
@@ -374,7 +374,7 @@ export function Board() {
                           {col.wipLimit > 0 ? ` / ${col.wipLimit}` : ''}
                         </span>
                         {exceeded && (
-                          <Icon name="warning" size={15} color="var(--warn)" title="Превышен лимит WIP" />
+                          <Icon name="warning" size={15} color="var(--warn)" title="Задач в колонке больше предела" />
                         )}
                       </span>
                       <button
@@ -456,7 +456,7 @@ export function Board() {
                               )}
                               {t.est > 0 && (
                                 <span className="count-pill spacer" style={{ fontSize: 11 }}>
-                                  {t.est} SP
+                                  {points(t.est)}
                                 </span>
                               )}
                             </div>

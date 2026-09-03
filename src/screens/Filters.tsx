@@ -26,14 +26,49 @@ const OPS = [
   { key: '~', label: 'содержит' },
 ]
 
+/*
+ * Русские имена полей и функций для строки запроса. Сервер понимает и
+ * английские — по ним могли быть сохранены старые фильтры, — но новые
+ * запросы собираются по-русски, чтобы строка читалась без словаря.
+ */
+const FIELD_RU: Record<string, string> = {
+  queue: 'очередь',
+  status: 'статус',
+  category: 'категория',
+  priority: 'приоритет',
+  assignee: 'исполнитель',
+  author: 'автор',
+  project: 'проект',
+  sprint: 'спринт',
+  tag: 'метка',
+  type: 'тип',
+  resolution: 'резолюция',
+  deadline: 'срок',
+  estimate: 'оценка',
+  text: 'текст',
+}
+
+const VALUE_RU: Record<string, string> = {
+  'currentUser()': 'я()',
+  'today()': 'сегодня()',
+  'endOfWeek()': 'конецНедели()',
+  'startOfWeek()': 'началоНедели()',
+  done: 'готово',
+  inprogress: 'в работе',
+  todo: 'ожидает',
+  blocked: 'заблокировано',
+}
+
 function buildQuery(conditions: Condition[], join: 'AND' | 'OR'): string {
   return conditions
     .filter((c) => c.field && c.value)
     .map((c) => {
-      const value = c.value.includes(' ') && !c.value.endsWith(')') ? `"${c.value}"` : c.value
-      return c.op === 'in' ? `${c.field} in (${c.value})` : `${c.field} ${c.op} ${value}`
+      const field = FIELD_RU[c.field] ?? c.field
+      const raw = VALUE_RU[c.value] ?? c.value
+      const value = raw.includes(' ') && !raw.endsWith(')') ? `"${raw}"` : raw
+      return c.op === 'in' ? `${field} из (${raw})` : `${field} ${c.op} ${value}`
     })
-    .join(` ${join} `)
+    .join(join === 'AND' ? ' И ' : ' ИЛИ ')
 }
 
 export function Filters() {
@@ -228,7 +263,7 @@ export function Filters() {
                   >
                     <option value="">— выберите —</option>
                     {c.field === 'assignee' || c.field === 'author' ? (
-                      <option value="currentUser()">я (currentUser)</option>
+                      <option value="currentUser()">я</option>
                     ) : null}
                     {field.values.map((v) => (
                       <option key={v} value={v}>

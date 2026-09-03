@@ -97,7 +97,7 @@ export function Reports() {
 
           {/* ── Нагрузка ─────────────────────────────────────────────── */}
           <section className="card card--pad">
-            <SectionTitle right={<span className="report__hint">открытые SP и распределение задач</span>}>
+            <SectionTitle right={<span className="report__hint">открытые баллы и распределение задач</span>}>
               Нагрузка сотрудников
             </SectionTitle>
 
@@ -108,7 +108,7 @@ export function Reports() {
                   {w.name}
                 </span>
                 <span className="mono" style={{ fontSize: 12, color: 'var(--tx2)' }}>
-                  {w.sp} SP
+                  {w.sp} б.
                 </span>
                 <span className="workload__bar">
                   <span style={{ width: w.doneW, background: 'var(--ok)' }} title={`Готово ${w.doneW}`} />
@@ -142,7 +142,7 @@ export function Reports() {
               <div key={s.label} className="sprint-metric">
                 <span style={{ fontSize: 12, flex: 1 }}>{s.label}</span>
                 <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
-                  {s.fact}/{s.plan} SP
+                  {s.fact}/{s.plan} б.
                 </span>
                 <span className="mono" style={{ fontSize: 12, color: s.fg, width: 40, textAlign: 'right' }}>
                   {s.pct}
@@ -164,7 +164,7 @@ export function Reports() {
               <span className="count-pill">{data?.overdue.length ?? 0}</span>
             </div>
             {(data?.overdue ?? []).length === 0 && (
-              <Empty icon="task_alt" title="Просрочек нет" text="Все дедлайны соблюдаются." />
+              <Empty icon="task_alt" title="Просрочек нет" text="Все сроки соблюдаются." />
             )}
             {(data?.overdue ?? []).map((o) => (
               <div
@@ -239,7 +239,7 @@ function Burndown({
         <span>
           <i style={{ background: 'var(--border2)' }} /> идеальный темп
         </span>
-        <span className="spacer mono">{points[points.length - 1].remaining} SP осталось</span>
+        <span className="spacer mono">{points[points.length - 1].remaining} б. осталось</span>
       </div>
     </div>
   )

@@ -192,7 +192,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         .regex(/^[A-Z][A-Z0-9]{1,9}$/, 'Ключ — от 2 до 10 латинских букв и цифр'),
       name: z.string().trim().min(2, 'Укажите название'),
       owner: z.string().trim().min(1, 'Выберите владельца'),
-      workflow: z.string().trim().min(1, 'Выберите воркфлоу'),
+      workflow: z.string().trim().min(1, 'Выберите схему'),
       access: z.enum(QUEUE_ACCESS).default('team'),
     })
     const parsed = schema.safeParse(req.body)
@@ -209,7 +209,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       prisma.workflow.findFirst({ where: { OR: [{ id: body.workflow }, { name: body.workflow }] } }),
     ])
     if (!owner) return reply.code(400).send({ error: 'Владелец не найден' })
-    if (!workflow) return reply.code(400).send({ error: 'Воркфлоу не найден' })
+    if (!workflow) return reply.code(400).send({ error: 'Схема не найдена' })
 
     const created = await prisma.queue.create({
       data: {
@@ -424,7 +424,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true }
   })
 
-  /* ── Теги ─────────────────────────────────────────────────────────── */
+  /* ── Метки ─────────────────────────────────────────────────────────── */
 
   app.get('/api/tags', async () => {
     const tags = await prisma.tag.findMany({

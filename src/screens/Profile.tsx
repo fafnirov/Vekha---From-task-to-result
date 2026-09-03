@@ -107,7 +107,7 @@ export function Profile() {
                 className="input"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                placeholder="Например: Backend"
+                placeholder="Например: разработчик"
               />
             </label>
           </div>

@@ -82,6 +82,87 @@ function tokenize(input: string): Token[] {
   return tokens
 }
 
+
+/* ── Русские имена ────────────────────────────────────────────────────── */
+
+/*
+ * Запрос пишется по-русски. Английские написания оставлены рабочими:
+ * по ним могли быть сохранены фильтры, и переименование не должно их
+ * ломать — а заодно это привычная запись для тех, кто пришёл из других
+ * трекеров.
+ */
+
+const KEYWORD_ALIAS: Record<string, string> = {
+  И: 'AND',
+  ИЛИ: 'OR',
+  НЕ: 'NOT',
+  ИЗ: 'IN',
+}
+
+const FIELD_ALIAS: Record<string, string> = {
+  очередь: 'queue',
+  статус: 'status',
+  категория: 'category',
+  приоритет: 'priority',
+  исполнитель: 'assignee',
+  автор: 'author',
+  проект: 'project',
+  спринт: 'sprint',
+  тип: 'type',
+  резолюция: 'resolution',
+  метка: 'tag',
+  метки: 'tags',
+  тег: 'tag',
+  теги: 'tags',
+  наблюдатель: 'watcher',
+  оценка: 'estimate',
+  срок: 'deadline',
+  дедлайн: 'deadline',
+  создана: 'created',
+  обновлена: 'updated',
+  заголовок: 'title',
+  текст: 'text',
+  ключ: 'key',
+  просрочена: 'overdue',
+}
+
+const FUNCTION_ALIAS: Record<string, string> = {
+  'я()': 'currentuser()',
+  'сегодня()': 'today()',
+  'сейчас()': 'now()',
+  'завтра()': 'tomorrow()',
+  'началонедели()': 'startofweek()',
+  'конецнедели()': 'endofweek()',
+  'конецмесяца()': 'endofmonth()',
+}
+
+const CATEGORY_ALIAS: Record<string, string> = {
+  готово: 'done',
+  'в работе': 'inprogress',
+  ожидает: 'todo',
+  заблокировано: 'blocked',
+}
+
+function categoryKey(value: string): string {
+  const lower = value.toLowerCase()
+  return CATEGORY_ALIAS[lower] ?? lower
+}
+
+/** Приводит написанное по-русски к внутреннему имени. */
+export function normalizeKeyword(word: string): string {
+  return KEYWORD_ALIAS[word.toUpperCase()] ?? word.toUpperCase()
+}
+
+export function normalizeField(word: string): string {
+  const lower = word.toLowerCase()
+  return FIELD_ALIAS[lower] ?? lower
+}
+
+export function normalizeValue(word: string): string {
+  const lower = word.toLowerCase()
+  return FUNCTION_ALIAS[lower] ?? word
+}
+
 /* ── Дерево ───────────────────────────────────────────────────────────── */
 
 type Node =
@@ -107,7 +188,7 @@ class Parser {
 
   private isKeyword(word: string): boolean {
     const t = this.peek()
-    return t.type === 'ident' && t.value.toUpperCase() === word
+    return t.type === 'ident' && normalizeKeyword(t.value) === word
   }
 
   parse(): Node {
@@ -156,10 +237,10 @@ class Parser {
     if (fieldToken.type !== 'ident') {
       throw new QueryError(`Ожидалось имя поля, получено «${fieldToken.value}»`)
     }
-    const field = fieldToken.value.toLowerCase()
+    const field = normalizeField(fieldToken.value)
 
     // `status in (Review, Testing)` — оператор словом.
-    if (this.peek().type === 'ident' && this.peek().value.toLowerCase() === 'in') {
+    if (this.peek().type === 'ident' && normalizeKeyword(this.peek().value) === 'IN') {
       this.next()
       return { kind: 'cmp', field, op: 'in', values: this.parseList() }
     }
@@ -197,7 +278,9 @@ class Parser {
         args.push(this.next().value)
       }
       if (this.peek().type === 'rparen') this.next()
-      return `${token.value}(${args.join(',')})`
+      // Русское имя функции приводится к внутреннему здесь, а не в каждом
+      // месте, где значение потом разбирают.
+      return normalizeValue(`${token.value}(${args.join(',')})`)
     }
     return token.value
   }
@@ -277,7 +360,7 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
       return wrap({ status: { name: { in: values } } })
 
     case 'category':
-      return wrap({ status: { category: { in: values.map((v) => v.toLowerCase()) } } })
+      return wrap({ status: { category: { in: values.map(categoryKey) } } })
 
     case 'priority': {
       // hasOwn обязателен: без него `priority = constructor` вытащит
@@ -376,7 +459,7 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
       }
       /*
        * Противоположность выписана явно, а не через NOT: в SQL сравнение
-       * с NULL даёт неопределённость, и задачи без дедлайна выпали бы
+       * с NULL даёт неопределённость, и задачи без срока выпали бы
        * и из «просроченных», и из «не просроченных».
        */
       const notOverdue: Where = {

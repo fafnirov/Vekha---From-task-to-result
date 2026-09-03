@@ -51,7 +51,7 @@ export function Queues() {
     <div className="page">
       <div className="page__head">
         <div className="page__title">Очереди</div>
-        <span className="page__note">контейнеры задач с собственным воркфлоу и правами</span>
+        <span className="page__note">контейнеры задач с собственной схемой и правами</span>
         {can('workflow.manage') && (
           <button type="button" className="btn btn--primary spacer" onClick={() => setCreating(true)}>
             <Icon name="add" size={16} />
@@ -66,7 +66,7 @@ export function Queues() {
           <span>Название</span>
           <span>Владелец</span>
           <span style={{ textAlign: 'right' }}>Задач</span>
-          <span>Воркфлоу</span>
+          <span>Схема работы</span>
           <span>Доступ</span>
           <span />
         </div>
@@ -77,7 +77,7 @@ export function Queues() {
           <Empty
             icon="layers"
             title="Очередей пока нет"
-            text="Очередь — это отдельный поток работы со своим воркфлоу, доступом и нумерацией задач."
+            text="Очередь — это отдельный поток работы со своей схемой работы, доступом и нумерацией задач."
           />
         )}
 
@@ -242,7 +242,7 @@ function QueueDialog({
               </select>
             </label>
             <label className="label">
-              <span>Воркфлоу</span>
+              <span>Схема работы</span>
               <select className="select" value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
                 {workflows.map((w) => (
                   <option key={w} value={w}>

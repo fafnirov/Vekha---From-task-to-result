@@ -11,7 +11,7 @@ export type StatusName = string
 /** Категория статуса — она же определяет цвет и попадание в отчёты. */
 export type StatusCategory = 'todo' | 'inprogress' | 'done' | 'blocked'
 
-export type PriorityName = 'Critical' | 'High' | 'Medium' | 'Low'
+export type PriorityName = 'Критический' | 'Высокий' | 'Средний' | 'Низкий'
 export type PriorityKey = 'critical' | 'high' | 'medium' | 'low'
 
 /** Короткий код участника: им задача ссылается на человека. */

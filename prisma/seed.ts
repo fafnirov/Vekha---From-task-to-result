@@ -185,8 +185,8 @@ interface SeedTask {
 const TASKS: SeedTask[] = [
   {
     key: 'VEKHA-142', title: 'Переработать структуру левой навигации',
-    status: 'In Progress', priority: 'high', who: 'AK', project: 'Platform Redesign',
-    queue: 'VEKHA', sprint: 'Sprint 24', due: 5, est: 5, tags: ['ui', 'frontend'], created: -11,
+    status: 'В работе', priority: 'high', who: 'AK', project: 'Platform Redesign',
+    queue: 'VEKHA', sprint: 'Sprint 24', due: 5, est: 5, tags: ['интерфейс', 'фронтенд'], created: -11,
     description:
       'Текущая карта разделов содержит 14 пунктов, четыре из них ведут на один и тот же список задач.\n\n' +
       'Нужно сократить меню до восьми разделов, вынести администрирование вниз и проверить свёрнутое состояние на экранах 13 дюймов.\n\n' +
@@ -197,81 +197,81 @@ const TASKS: SeedTask[] = [
   },
   {
     key: 'VEKHA-141', title: 'Ошибка сортировки в списке задач при смене представления',
-    status: 'In Progress', priority: 'critical', who: 'DS', project: 'Platform Redesign',
-    queue: 'VEKHA', sprint: 'Sprint 24', due: 0, est: 3, tags: ['bug'], created: -6,
+    status: 'В работе', priority: 'critical', who: 'DS', project: 'Platform Redesign',
+    queue: 'VEKHA', sprint: 'Sprint 24', due: 0, est: 3, tags: ['ошибка'], created: -6,
     description: 'Сортировка сбрасывается при переключении представления. Воспроизводится на списке из 50+ задач.',
   },
   {
     key: 'VEKHA-138', title: 'Массовые действия для выбранных задач',
-    status: 'Review', priority: 'high', who: 'MN', project: 'Platform Redesign',
-    queue: 'VEKHA', sprint: 'Sprint 24', due: -1, est: 8, tags: ['ui'], created: -18,
+    status: 'На проверке', priority: 'high', who: 'MN', project: 'Platform Redesign',
+    queue: 'VEKHA', sprint: 'Sprint 24', due: -1, est: 8, tags: ['интерфейс'], created: -18,
     description: 'Смена статуса, исполнителя и спринта для набора задач одним действием.',
   },
   {
     key: 'MOB-87', title: 'Офлайн-режим для списка задач',
-    status: 'Open', priority: 'medium', who: 'IV', project: 'Mobile App 2.0',
-    queue: 'MOB', sprint: 'Sprint 24', due: 10, est: 13, tags: ['mobile'], created: -14,
+    status: 'Открыта', priority: 'medium', who: 'IV', project: 'Mobile App 2.0',
+    queue: 'MOB', sprint: 'Sprint 24', due: 10, est: 13, tags: ['мобильные'], created: -14,
   },
   {
     key: 'MOB-84', title: 'Push-уведомления по упоминаниям',
-    status: 'In Progress', priority: 'medium', who: 'IV', project: 'Mobile App 2.0',
-    queue: 'MOB', sprint: 'Sprint 24', due: 6, est: 5, tags: ['mobile', 'api'], created: -20,
+    status: 'В работе', priority: 'medium', who: 'IV', project: 'Mobile App 2.0',
+    queue: 'MOB', sprint: 'Sprint 24', due: 6, est: 5, tags: ['мобильные', 'обмен'], created: -20,
   },
   {
     key: 'LMS-23', title: 'Синхронизация групп с College LMS',
-    status: 'Blocked', priority: 'critical', who: 'PG', project: 'College LMS Integration',
-    queue: 'LMS', sprint: 'Sprint 24', due: -4, est: 8, tags: ['api', 'integration'], created: -26,
+    status: 'Заблокирована', priority: 'critical', who: 'PG', project: 'College LMS Integration',
+    queue: 'LMS', sprint: 'Sprint 24', due: -4, est: 8, tags: ['обмен', 'интеграция'], created: -26,
     description: 'Партнёр не отдаёт список групп по API. Ждём ответа команды интеграции.',
   },
   {
     key: 'LMS-21', title: 'Маппинг ролей преподавателей',
-    status: 'Open', priority: 'high', who: 'PG', project: 'College LMS Integration',
-    queue: 'LMS', sprint: null, due: 13, est: 5, tags: ['api'], created: -22,
+    status: 'Открыта', priority: 'high', who: 'PG', project: 'College LMS Integration',
+    queue: 'LMS', sprint: null, due: 13, est: 5, tags: ['обмен'], created: -22,
   },
   {
     key: 'SEC-12', title: 'Аудит прав доступа к очередям',
-    status: 'Testing', priority: 'high', who: 'EL', project: 'Security Audit',
-    queue: 'SEC', sprint: 'Sprint 24', due: 2, est: 5, tags: ['security'], created: -16,
+    status: 'Тестирование', priority: 'high', who: 'EL', project: 'Security Audit',
+    queue: 'SEC', sprint: 'Sprint 24', due: 2, est: 5, tags: ['безопасность'], created: -16,
   },
   {
     key: 'SEC-9', title: 'Политика хранения вложений',
-    status: 'New', priority: 'medium', who: null, project: 'Security Audit',
-    queue: 'SEC', sprint: null, due: 16, est: 3, tags: ['security', 'docs'], created: -9,
+    status: 'Новая', priority: 'medium', who: null, project: 'Security Audit',
+    queue: 'SEC', sprint: null, due: 16, est: 3, tags: ['безопасность', 'документация'], created: -9,
   },
   {
     key: 'VEKHA-136', title: 'Конструктор фильтров: сохранённые представления',
-    status: 'Done', priority: 'medium', who: 'AK', project: 'Platform Redesign',
-    queue: 'VEKHA', sprint: 'Sprint 23', due: -8, est: 8, tags: ['ui'], created: -34,
+    status: 'Готово', priority: 'medium', who: 'AK', project: 'Platform Redesign',
+    queue: 'VEKHA', sprint: 'Sprint 23', due: -8, est: 8, tags: ['интерфейс'], created: -34,
   },
   {
     key: 'INT-45', title: 'Автоматизация: закрытие задач по релизу',
-    status: 'Open', priority: 'low', who: 'DS', project: 'Internal Tools',
-    queue: 'INT', sprint: null, due: 20, est: 3, tags: ['automation'], created: -12,
+    status: 'Открыта', priority: 'low', who: 'DS', project: 'Internal Tools',
+    queue: 'INT', sprint: null, due: 20, est: 3, tags: ['автоматизация'], created: -12,
   },
   {
     key: 'INT-41', title: 'Экспорт отчётов в XLSX',
-    status: 'Review', priority: 'medium', who: 'MN', project: 'Internal Tools',
-    queue: 'INT', sprint: 'Sprint 24', due: 3, est: 5, tags: ['reports'], created: -19,
+    status: 'На проверке', priority: 'medium', who: 'MN', project: 'Internal Tools',
+    queue: 'INT', sprint: 'Sprint 24', due: 3, est: 5, tags: ['отчёты'], created: -19,
   },
   {
     key: 'REL-24', title: 'Чек-лист приёмки Release 2.4',
-    status: 'In Progress', priority: 'high', who: 'AK', project: 'Release 2.4',
-    queue: 'REL', sprint: 'Sprint 24', due: 4, est: 3, tags: ['release'], created: -8,
+    status: 'В работе', priority: 'high', who: 'AK', project: 'Release 2.4',
+    queue: 'REL', sprint: 'Sprint 24', due: 4, est: 3, tags: ['выпуск'], created: -8,
   },
   {
     key: 'REL-22', title: 'Регресс-тестирование доски',
-    status: 'Testing', priority: 'medium', who: 'DS', project: 'Release 2.4',
-    queue: 'REL', sprint: 'Sprint 24', due: -3, est: 8, tags: ['qa'], created: -15,
+    status: 'Тестирование', priority: 'medium', who: 'DS', project: 'Release 2.4',
+    queue: 'REL', sprint: 'Sprint 24', due: -3, est: 8, tags: ['проверка'], created: -15,
   },
   {
     key: 'VEKHA-131', title: 'Skeleton-состояния для тяжёлых таблиц',
-    status: 'Done', priority: 'low', who: 'MN', project: 'Platform Redesign',
-    queue: 'VEKHA', sprint: 'Sprint 23', due: -9, est: 2, tags: ['ui'], created: -37,
+    status: 'Готово', priority: 'low', who: 'MN', project: 'Platform Redesign',
+    queue: 'VEKHA', sprint: 'Sprint 23', due: -9, est: 2, tags: ['интерфейс'], created: -37,
   },
   {
     key: 'VEKHA-129', title: 'Настройка воркфлоу очереди VEKHA',
-    status: 'New', priority: 'medium', who: 'PG', project: 'Platform Redesign',
-    queue: 'VEKHA', sprint: null, due: null, est: 5, tags: ['admin'], created: -5,
+    status: 'Новая', priority: 'medium', who: 'PG', project: 'Platform Redesign',
+    queue: 'VEKHA', sprint: null, due: null, est: 5, tags: ['админ'], created: -5,
   },
 ]
 
@@ -306,7 +306,7 @@ const RULES = [
   {
     name: 'Перевод в Review уведомляет ревьюера',
     trigger: 'status_changed',
-    condition: { all: [{ field: 'status', op: 'eq', value: 'Review' }] },
+    condition: { all: [{ field: 'status', op: 'eq', value: 'На проверке' }] },
     actions: [{ type: 'notify', role: 'manager', value: 'Задача ждёт вашего ревью' }],
     icon: 'rate_review', iconFg: 'var(--warn)', enabled: true, runs: 214,
   },
@@ -344,7 +344,7 @@ const FILTERS = [
   { name: 'Мои открытые', query: 'assignee = currentUser() AND category != done', icon: 'push_pin', iconFg: 'var(--ac)', favorite: true, shared: false },
   { name: 'Ждут моего ревью', query: 'status = Review AND assignee = currentUser()', icon: 'push_pin', iconFg: 'var(--ac)', favorite: true, shared: false },
   { name: 'Просроченные', query: 'overdue = true', icon: 'schedule', iconFg: 'var(--dang)', favorite: false, shared: true },
-  { name: 'Критичные в спринте', query: 'priority = Critical AND sprint = "Sprint 24"', icon: 'priority_high', iconFg: 'var(--dang)', favorite: false, shared: true },
+  { name: 'Критичные в спринте', query: 'приоритет = Критический AND sprint = "Sprint 24"', icon: 'priority_high', iconFg: 'var(--dang)', favorite: false, shared: true },
   { name: 'Без исполнителя', query: 'assignee = empty() AND category != done', icon: 'person_off', iconFg: 'var(--tx3)', favorite: false, shared: true },
   { name: 'Незаоценённые', query: 'estimate = 0 AND category != done', icon: 'straighten', iconFg: 'var(--warn)', favorite: false, shared: false },
   { name: 'Блокирующие релиз', query: 'queue = REL AND category = blocked', icon: 'block', iconFg: 'var(--dang)', favorite: false, shared: true },
@@ -533,7 +533,7 @@ async function main() {
     const num = Number(t.key.split('-')[1])
     counters.set(t.queue, Math.max(counters.get(t.queue) ?? 0, num))
 
-    const done = t.status === 'Done'
+    const done = t.status === 'Готово'
     const task = await prisma.task.create({
       data: {
         key: t.key,
@@ -601,7 +601,7 @@ async function main() {
         ? day(Math.floor(rand() * 40) + 2, 18)
         : new Date(closedAt.getTime() - slip * 86_400_000)
 
-      const status = open ? pick(['New', 'Open', 'Open', 'In Progress', 'Review']) : 'Done'
+      const status = open ? pick(['Новая', 'Открыта', 'Открыта', 'В работе', 'На проверке']) : 'Готово'
       const sprintName =
         queueKey === 'VEKHA' && !open ? pick(['Sprint 21', 'Sprint 22', 'Sprint 23']) : null
 
@@ -638,10 +638,10 @@ async function main() {
   let subNum = counters.get('VEKHA')!
 
   const SUBTASKS = [
-    { title: 'Собрать карту текущих разделов', status: 'Done', who: 'MN', est: 2, due: -4 },
-    { title: 'Три варианта свёрнутого меню', status: 'Done', who: 'MN', est: 3, due: -2 },
-    { title: 'Проверить меню на 13-дюймовых экранах', status: 'In Progress', who: 'AK', est: 2, due: 3 },
-    { title: 'Скрывать разделы без прав', status: 'New', who: 'PG', est: 1, due: 5 },
+    { title: 'Собрать карту текущих разделов', status: 'Готово', who: 'MN', est: 2, due: -4 },
+    { title: 'Три варианта свёрнутого меню', status: 'Готово', who: 'MN', est: 3, due: -2 },
+    { title: 'Проверить меню на 13-дюймовых экранах', status: 'В работе', who: 'AK', est: 2, due: 3 },
+    { title: 'Скрывать разделы без прав', status: 'Новая', who: 'PG', est: 1, due: 5 },
   ]
 
   for (const s of SUBTASKS) {
@@ -663,7 +663,7 @@ async function main() {
         estimate: s.est,
         rank: subNum,
         createdAt: day(-10),
-        closedAt: s.status === 'Done' ? day(s.due, 15) : null,
+        closedAt: s.status === 'Готово' ? day(s.due, 15) : null,
       },
     })
   }
@@ -724,14 +724,14 @@ async function main() {
   }
 
   const HISTORY = [
-    { key: 'VEKHA-142', who: 'AK', kind: 'status', note: 'изменил(а) статус', from: 'Open', to: 'In Progress', at: day(0, 9, 2) },
-    { key: 'VEKHA-142', who: 'DS', kind: 'priority', note: 'изменил(а) приоритет', from: 'Medium', to: 'High', at: day(-1, 18, 30) },
+    { key: 'VEKHA-142', who: 'AK', kind: 'status', note: 'изменил(а) статус', from: 'Открыта', to: 'В работе', at: day(0, 9, 2) },
+    { key: 'VEKHA-142', who: 'DS', kind: 'priority', note: 'изменил(а) приоритет', from: 'Средний', to: 'Высокий', at: day(-1, 18, 30) },
     { key: 'VEKHA-142', who: 'AK', kind: 'estimate', note: 'установил(а) оценку 5 SP', at: day(-1, 15, 10) },
     { key: 'VEKHA-142', who: 'PG', kind: 'link', note: 'добавил(а) связь «блокирует VEKHA-138»', at: day(-9, 11, 20) },
-    { key: 'VEKHA-138', who: 'DS', kind: 'status', note: 'изменил(а) статус', from: 'In Progress', to: 'Review', at: day(0, 9, 40) },
-    { key: 'MOB-84', who: 'IV', kind: 'status', note: 'изменил(а) статус', from: 'Open', to: 'In Progress', at: day(0, 7, 15) },
+    { key: 'VEKHA-138', who: 'DS', kind: 'status', note: 'изменил(а) статус', from: 'В работе', to: 'На проверке', at: day(0, 9, 40) },
+    { key: 'MOB-84', who: 'IV', kind: 'status', note: 'изменил(а) статус', from: 'Открыта', to: 'В работе', at: day(0, 7, 15) },
     { key: 'LMS-23', who: null, kind: 'automation', note: 'подняла приоритет по правилу «Просроченные задачи поднимают приоритет»', at: day(0, 9, 0) },
-    { key: 'VEKHA-136', who: 'AK', kind: 'status', note: 'изменил(а) статус', from: 'Testing', to: 'Done', at: day(-8, 16, 0) },
+    { key: 'VEKHA-136', who: 'AK', kind: 'status', note: 'изменил(а) статус', from: 'Тестирование', to: 'Готово', at: day(-8, 16, 0) },
   ]
 
   for (const h of HISTORY) {

@@ -204,7 +204,7 @@ function ProjectDialog({
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Platform Redesign"
+              placeholder="Например: Переезд на новый домен"
               autoFocus
             />
           </label>

@@ -267,7 +267,7 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
       taskId: task.id,
       actorId: req.user!.id,
       kind: 'sprint',
-      note: 'вернул(а) задачу в бэклог',
+      note: 'убрал(а) задачу из спринта',
       field: 'sprint',
       fromValue: task.sprint?.name ?? '—',
       toValue: '—',

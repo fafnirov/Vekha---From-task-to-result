@@ -1,13 +1,20 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, PriorityChip, Progress, StatusBadge, TaskKey } from '../components/ui'
-import { dueColor } from '../data/catalog'
+import { dueColor, points } from '../data/catalog'
 import { api } from '../api/client'
 import { useApiMutation, usePlanning, useQueues } from '../api/hooks'
 import { useSession } from '../store/session'
 import { useUi } from '../store/ui'
 import { useApp } from '../store/app'
 import type { Task } from '../data/types'
+
+/** Состояние спринта хранится ключом, показывается словом. */
+const SPRINT_STATE: Record<string, string> = {
+  planned: 'запланирован',
+  active: 'идёт',
+  closed: 'закрыт',
+}
 
 const SPRINT_GRID = '20px 88px minmax(0,1fr) 30px 116px 26px 46px 26px'
 
@@ -80,7 +87,7 @@ export function Backlog() {
     }
     try {
       await removeFromSprint.mutateAsync({ id: sprint.id, key })
-      toast('Возвращено в бэклог', key, 'info')
+      toast('Убрано из спринта', key, 'info')
     } catch (err) {
       toastError(err)
     }
@@ -118,7 +125,7 @@ export function Backlog() {
             <option value="">Активный спринт</option>
             {(planning.data?.sprints ?? []).map((s) => (
               <option key={s.id} value={s.name}>
-                {s.name} · {s.state}
+                {s.name} · {SPRINT_STATE[s.state] ?? s.state}
               </option>
             ))}
           </select>
@@ -130,7 +137,7 @@ export function Backlog() {
             </button>
           )}
           <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
-            перетащите задачи из бэклога в спринт
+            перетащите задачи из общего списка в спринт
           </span>
         </div>
 
@@ -163,7 +170,7 @@ export function Backlog() {
             <div className="card__title">{sprint?.name ?? 'Спринт не выбран'}</div>
             {sprint && <span style={{ fontSize: 12, color: 'var(--tx3)' }}>{sprint.range}</span>}
             <span className="badge mono" style={{ background: 'var(--n-bg)', color: 'var(--tx2)' }}>
-              {planned} SP / {capacity || '—'}
+              {planned} / {capacity || '—'} б.
             </span>
             {sprint && (
               <span
@@ -199,7 +206,7 @@ export function Backlog() {
                   void closeSprint
                     .mutateAsync({ id: sprint.id, moveTo: null })
                     .then((r) =>
-                      toast('Спринт закрыт', `Незакрытых задач возвращено в бэклог: ${r.moved}`, 'ok'),
+                      toast('Спринт закрыт', `Незакрытых задач убрано из спринта: ${r.moved}`, 'ok'),
                     )
                     .catch(toastError)
                 }
@@ -225,7 +232,7 @@ export function Backlog() {
                 manage
                   ? {
                       icon: 'remove_circle_outline',
-                      title: 'Вернуть в бэклог',
+                      title: 'Убрать из спринта',
                       run: () => void drop(t.key),
                     }
                   : undefined
@@ -238,7 +245,7 @@ export function Backlog() {
         <section className="card" style={{ overflowX: 'auto' }}>
           <div className="sprint__head" style={{ background: 'var(--surface2)' }}>
             <Icon name="inbox" size={17} color="var(--tx2)" />
-            <div className="card__title">Бэклог</div>
+            <div className="card__title">Вне спринтов</div>
             <span className="count-pill">{backlog.length}</span>
             <button type="button" className="btn btn--dashed btn--sm spacer" onClick={ui.openCreateModal}>
               <Icon name="add" size={15} />
@@ -249,7 +256,7 @@ export function Backlog() {
           {backlog.length === 0 && !planning.isLoading && (
             <Empty
               icon="inbox"
-              title="Бэклог пуст"
+              title="Вне спринтов ничего нет"
               text="Все незакрытые задачи уже распределены по спринтам."
             />
           )}
@@ -284,7 +291,7 @@ export function Backlog() {
             <span className="mono" style={{ fontSize: 22, color: pctColor }}>
               {planned}
             </span>
-            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>из {capacity || '—'} SP</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>из {capacity || '—'} баллов</span>
           </div>
           <Progress pct={`${Math.min(100, pct)}%`} color={pctColor} style={{ height: 6, borderRadius: 3 }} />
 
@@ -295,19 +302,19 @@ export function Backlog() {
             </div>
             <div>
               <b className="mono">{summary?.free ?? 0}</b>
-              <span>свободно SP</span>
+              <span>свободно баллов</span>
             </div>
             <div>
               <b className="mono" style={{ color: summary?.over ? 'var(--dang)' : undefined }}>
                 {summary?.over ?? 0}
               </b>
-              <span>перебор SP</span>
+              <span>перебор баллов</span>
             </div>
           </div>
 
           {manage && sprint && (
             <label className="label" style={{ marginTop: 12 }}>
-              <span>Ёмкость команды, SP</span>
+              <span>Ёмкость команды, баллы</span>
               <input
                 className="input"
                 type="number"
@@ -434,7 +441,7 @@ function PlanRow({
       <StatusBadge status={task.status} category={task.statusCategory} small />
       <Avatar id={task.who} size="md" />
       <span className="mono" style={{ fontSize: 12, color: dueColor(task.dueState), textAlign: 'right' }}>
-        {task.est ? `${task.est} SP` : '—'}
+        {task.est ? points(task.est) : '—'}
       </span>
       {action ? (
         <button
@@ -502,7 +509,7 @@ function SprintDialog({
                 className="input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Sprint 25"
+                placeholder="Например: Спринт 25"
                 autoFocus
               />
             </label>
@@ -538,7 +545,7 @@ function SprintDialog({
               <input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </label>
             <label className="label">
-              <span>Ёмкость, SP</span>
+              <span>Ёмкость, баллы</span>
               <input
                 className="input"
                 type="number"

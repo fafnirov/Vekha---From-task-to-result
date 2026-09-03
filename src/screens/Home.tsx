@@ -235,7 +235,7 @@ export function Home() {
               <div className="home__sprint">
                 <div>
                   <b className="mono">{data.sprint.donePoints}</b>
-                  <span>из {data.sprint.points} SP</span>
+                  <span>из {data.sprint.points} баллов</span>
                 </div>
                 <div>
                   <b className="mono">{data.sprint.tasks}</b>
@@ -264,7 +264,7 @@ export function Home() {
 
           <section className="card card--clip">
             <div className="card__head">
-              <div className="card__title">Упоминания и ревью</div>
+              <div className="card__title">Упоминания и проверка</div>
             </div>
             {(data?.mentions.length ?? 0) === 0 && <div className="home__none">Пока ничего</div>}
             {(data?.mentions ?? []).map((m) => (

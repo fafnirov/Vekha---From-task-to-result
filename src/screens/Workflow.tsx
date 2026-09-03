@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Avatar, Checkbox, Empty, Icon, Segmented, Toggle, UnderlineTabs } from '../components/ui'
 import { PasswordReset } from '../components/PasswordReset'
 import { Tooltip } from '../components/Tooltip'
-import { ROLE_LABEL } from '../data/catalog'
+import { CATEGORY_LABEL, ROLE_LABEL } from '../data/catalog'
 import { api, BASE } from '../api/client'
 import {
   useApiMutation,
@@ -35,7 +35,7 @@ type TabId =
 
 const TABS: { value: TabId; label: string }[] = [
   { value: 'org', label: 'Организация' },
-  { value: 'workflow', label: 'Воркфлоу' },
+  { value: 'workflow', label: 'Схема работы' },
   { value: 'types', label: 'Типы и резолюции' },
   { value: 'fields', label: 'Поля' },
   { value: 'permissions', label: 'Права' },
@@ -218,7 +218,7 @@ function WorkflowTab({ manage }: { manage: boolean }) {
     ['workflow'],
   )
 
-  if (!wf) return <Empty icon="account_tree" title="Воркфлоу нет" text="Создайте очередь — вместе с ней появится воркфлоу." />
+  if (!wf) return <Empty icon="account_tree" title="Схем работы нет" text="Создайте очередь — вместе с ней появится воркфлоу." />
 
   return (
     <div className="stack">
@@ -256,7 +256,7 @@ function WorkflowTab({ manage }: { manage: boolean }) {
             <span key={s.id} className="wf-pill" style={{ borderColor: s.color }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
               {s.name}
-              <span className="wf-pill__cat">{s.category}</span>
+              <span className="wf-pill__cat">{CATEGORY_LABEL[s.category] ?? s.category}</span>
               {manage && (
                 <button
                   type="button"
@@ -392,7 +392,7 @@ function WorkflowGraph({ wf }: { wf: WorkflowType }) {
             key={s.id}
             className="wf-node"
             style={{ left: s.left, top: s.top, borderColor: s.color }}
-            title={`${s.name} · ${s.category}`}
+            title={`${s.name} · ${CATEGORY_LABEL[s.category] ?? s.category}`}
           >
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
             {s.name}
@@ -846,7 +846,7 @@ function RulesTab({ manage }: { manage: boolean }) {
         <Empty
           icon="bolt"
           title="Автоматизаций нет"
-          text="Правило срабатывает на событие, проверяет условие и выполняет действие — например уведомляет ревьюера."
+          text="Правило срабатывает на событие, проверяет условие и выполняет действие — например уведомляет проверяющего."
         />
       )}
 
@@ -986,7 +986,7 @@ function RuleDialog({
                 <option value="status">статус</option>
                 <option value="category">категория статуса</option>
                 <option value="priority">приоритет</option>
-                <option value="tags">тег</option>
+                <option value="tags">метка</option>
                 <option value="overdue">просрочено</option>
                 <option value="subtasksAllDone">все подзадачи закрыты</option>
               </select>
@@ -1010,7 +1010,7 @@ function RuleDialog({
                 <option value="set_priority">сменить приоритет</option>
                 <option value="set_status">сменить статус</option>
                 <option value="set_assignee">назначить исполнителя</option>
-                <option value="add_tag">добавить тег</option>
+                <option value="add_tag">добавить метка</option>
                 <option value="add_comment">добавить комментарий</option>
               </select>
             </label>
@@ -1120,7 +1120,7 @@ function BoardTab({ manage }: { manage: boolean }) {
       <div className="thead" style={{ gridTemplateColumns: '160px minmax(0,1fr) 120px', gap: 10, padding: '0 13px' }}>
         <span>Колонка</span>
         <span>Статусы</span>
-        <span>Лимит WIP</span>
+        <span>Предел задач в колонке</span>
       </div>
 
       {(board.data?.columns ?? []).map((c) => (
