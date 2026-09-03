@@ -14,7 +14,7 @@ import {
 } from '../lib/dto.js'
 import { bus, type ChangeEvent } from '../lib/events.js'
 import { PROJECT_PALETTE } from '../lib/constants.js'
-import { taskScope } from '../lib/access.js'
+import { projectScope, taskScope } from '../lib/access.js'
 import { relativeTime, shortDate, startOfDay } from '../lib/format.js'
 
 const activityInclude = {
@@ -107,8 +107,23 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
           where: { status: { category: { not: 'done' } }, ...taskScope(me) },
           include: taskInclude,
         }),
+        /*
+         * На главной — только свои проекты: те, где человек руководитель
+         * или исполняет хотя бы одну задачу. Полный список живёт на
+         * экране «Проекты»; сводка, показывающая заодно чужое, перестаёт
+         * быть сводкой.
+         *
+         * Условия сложены через AND, а не разлиты по объекту: у
+         * projectScope свой ключ OR, и он затёрся бы соседним.
+         */
         prisma.project.findMany({
-          where: { state: { in: ['active', 'risk', 'release'] } },
+          where: {
+            AND: [
+              { state: { in: ['active', 'risk', 'release'] } },
+              projectScope(me),
+              { OR: [{ leadId: me.id }, { tasks: { some: { assigneeId: me.id } } }] },
+            ],
+          },
           include: {
             lead: { select: { code: true } },
             queue: { select: { key: true } },

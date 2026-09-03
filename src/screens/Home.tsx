@@ -177,27 +177,42 @@ export function Home() {
                 </button>
               }
             >
-              Активные проекты
+              Мои проекты
             </SectionTitle>
 
-            <div className="home__projects">
-              {(data?.projects ?? []).map((p) => (
-                <Link key={p.id} to={`/projects/${encodeURIComponent(p.name)}`} className="home__project">
-                  <span className="project__mark" style={{ background: p.bg, color: p.fg }}>
-                    {p.abbr}
-                  </span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span className="ellipsis" style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
-                      {p.name}
+            {(data?.projects ?? []).length === 0 ? (
+              /* Пустой блок читался бы как «проектов нет», хотя они есть —
+                 просто ни один не ваш. */
+              <Empty
+                icon="folder_open"
+                title="Вы не участвуете ни в одном проекте"
+                text="Сюда попадают проекты, где вы руководитель или исполняете задачу."
+                action={
+                  <button type="button" className="btn btn--secondary btn--sm" onClick={() => nav('/projects')}>
+                    Посмотреть все проекты
+                  </button>
+                }
+              />
+            ) : (
+              <div className="home__projects">
+                {(data?.projects ?? []).map((p) => (
+                  <Link key={p.id} to={`/projects/${encodeURIComponent(p.name)}`} className="home__project">
+                    <span className="project__mark" style={{ background: p.bg, color: p.fg }}>
+                      {p.abbr}
                     </span>
-                    <Progress pct={p.pct} color={p.fg} variant="thin" style={{ marginTop: 6 }} />
-                  </span>
-                  <span className="mono" style={{ fontSize: 12, color: p.atRisk ? 'var(--dang)' : 'var(--tx2)' }}>
-                    {p.pct}
-                  </span>
-                </Link>
-              ))}
-            </div>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span className="ellipsis" style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
+                        {p.name}
+                      </span>
+                      <Progress pct={p.pct} color={p.fg} variant="thin" style={{ marginTop: 6 }} />
+                    </span>
+                    <span className="mono" style={{ fontSize: 12, color: p.atRisk ? 'var(--dang)' : 'var(--tx2)' }}>
+                      {p.pct}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
         </div>
 

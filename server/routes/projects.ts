@@ -8,6 +8,7 @@ import { milestoneDto, projectDto, taskDto, taskInclude } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
 import { PROJECT_PALETTE, PROJECT_STATES } from '../lib/constants.js'
 import { abbrFrom, longDate, shortDate, startOfDay } from '../lib/format.js'
+import { canSeeQueue, projectScope, taskScope } from '../lib/access.js'
 
 const projectInclude = {
   lead: { select: { code: true } },
@@ -38,8 +39,9 @@ const CATEGORY_COLOR: Record<string, string> = {
 export async function projectRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
 
-  app.get('/api/projects', async () => {
+  app.get('/api/projects', async (req) => {
     const rows = await prisma.project.findMany({
+      where: projectScope(req.user!),
       include: projectInclude,
       orderBy: { createdAt: 'asc' },
     })
@@ -51,6 +53,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     const decoded = decodeURIComponent(name)
 
     const all = await prisma.project.findMany({
+      where: projectScope(req.user!),
       include: projectInclude,
       orderBy: { createdAt: 'asc' },
     })
@@ -58,8 +61,11 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     if (index === -1) return reply.code(404).send({ error: 'Проект не найден' })
     const project = all[index]
 
+    // Задача принадлежит очереди отдельно от проекта, поэтому в проекте
+    // может лежать задача из чужой очереди — её видимость проверяется
+    // сама по себе, а не по проекту.
     const tasks = await prisma.task.findMany({
-      where: { projectId: project.id },
+      where: { projectId: project.id, ...taskScope(req.user!) },
       include: taskInclude,
       orderBy: [{ status: { order: 'asc' } }, { num: 'desc' }],
     })
@@ -209,7 +215,11 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       prisma.queue.findFirst({ where: { OR: [{ id: body.queue }, { key: body.queue.toUpperCase() }] } }),
       prisma.user.findFirst({ where: { OR: [{ id: body.lead }, { code: body.lead }] } }),
     ])
-    if (!queue) return reply.code(400).send({ error: 'Очередь не найдена' })
+    // Очередь, закрытую от человека, он и в списке не видит — создавать в
+    // ней проект тем более не должен.
+    if (!queue || !canSeeQueue(req.user!, queue)) {
+      return reply.code(400).send({ error: 'Очередь не найдена' })
+    }
     if (!lead) return reply.code(400).send({ error: 'Руководитель не найден' })
 
     const exists = await prisma.project.findUnique({ where: { name: body.name } })
@@ -250,6 +260,12 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
     const body = parsed.data
 
+    const target = await prisma.project.findFirst({
+      where: { AND: [{ id }, projectScope(req.user!)] },
+      select: { id: true },
+    })
+    if (!target) return reply.code(404).send({ error: 'Проект не найден' })
+
     const lead = body.lead
       ? await prisma.user.findFirst({ where: { OR: [{ id: body.lead }, { code: body.lead }] } })
       : null
@@ -278,6 +294,11 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/api/projects/:id', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'workflow.manage'))) return
     const { id } = req.params as { id: string }
+    const target = await prisma.project.findFirst({
+      where: { AND: [{ id }, projectScope(req.user!)] },
+      select: { id: true },
+    })
+    if (!target) return reply.code(404).send({ error: 'Проект не найден' })
     await prisma.project.delete({ where: { id } }).catch(() => undefined)
     emitChanges(['projects', 'tasks'])
     return { ok: true }
@@ -299,6 +320,12 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0].message })
     }
+
+    const host = await prisma.project.findFirst({
+      where: { AND: [{ id }, projectScope(req.user!)] },
+      select: { id: true },
+    })
+    if (!host) return reply.code(404).send({ error: 'Проект не найден' })
 
     const created = await prisma.milestone.create({
       data: {
@@ -326,6 +353,12 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
 
+    const owned = await prisma.milestone.findFirst({
+      where: { id, project: projectScope(req.user!) },
+      select: { id: true },
+    })
+    if (!owned) return reply.code(404).send({ error: 'Веха не найдена' })
+
     const updated = await prisma.milestone.update({
       where: { id },
       data: {
@@ -342,6 +375,11 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/api/milestones/:id', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'sprint.manage'))) return
     const { id } = req.params as { id: string }
+    const owned = await prisma.milestone.findFirst({
+      where: { id, project: projectScope(req.user!) },
+      select: { id: true },
+    })
+    if (!owned) return reply.code(404).send({ error: 'Веха не найдена' })
     await prisma.milestone.delete({ where: { id } }).catch(() => undefined)
     emitChanges(['projects'])
     return { ok: true }

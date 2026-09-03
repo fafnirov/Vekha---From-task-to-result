@@ -56,6 +56,19 @@ export function queueScope(user: SessionUser): Prisma.QueueWhereInput {
 }
 
 /**
+ * Условие видимости для выборок по проектам.
+ *
+ * Проект принадлежит очереди, но список проектов раньше отдавался целиком
+ * любому вошедшему: название, описание, руководитель, срок и доля
+ * выполненного утекали из очереди, закрытой от человека.
+ */
+export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
+  if (user.role === 'admin') return {}
+  const allowed = user.role === 'manager' ? MANAGER : OPEN
+  return { OR: [{ queue: { access: { in: allowed } } }, { queue: { ownerId: user.id } }] }
+}
+
+/**
  * Условие поиска задачи по ключу с учётом видимости очереди.
  *
  * Проверка доступа встроена в сам запрос, поэтому её нельзя забыть на
