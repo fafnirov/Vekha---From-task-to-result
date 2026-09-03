@@ -88,7 +88,7 @@ export function ProjectDetail() {
         <div style={{ minWidth: 0 }}>
           <div className="page__title">{project.name}</div>
           <div className="page__note" style={{ marginLeft: 0 }}>
-            {project.queue} · лид {people.find((p) => p.code === project.lead)?.name ?? project.lead} · до{' '}
+            {project.queue} · руководитель {people.find((p) => p.code === project.lead)?.name ?? project.lead} · до{' '}
             {project.due}
           </div>
         </div>

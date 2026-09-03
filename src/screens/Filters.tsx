@@ -4,6 +4,7 @@ import { Avatar, Empty, Icon, StatusBadge, TaskKey } from '../components/ui'
 import { dueColor } from '../data/catalog'
 import { api } from '../api/client'
 import { useApiMutation, useFilterFields, useFilters, useTasks } from '../api/hooks'
+import { fieldRu, valueRu, valuesRu } from '../data/query-ru'
 import { useApp } from '../store/app'
 
 /**
@@ -26,47 +27,14 @@ const OPS = [
   { key: '~', label: 'содержит' },
 ]
 
-/*
- * Русские имена полей и функций для строки запроса. Сервер понимает и
- * английские — по ним могли быть сохранены старые фильтры, — но новые
- * запросы собираются по-русски, чтобы строка читалась без словаря.
- */
-const FIELD_RU: Record<string, string> = {
-  queue: 'очередь',
-  status: 'статус',
-  category: 'категория',
-  priority: 'приоритет',
-  assignee: 'исполнитель',
-  author: 'автор',
-  project: 'проект',
-  sprint: 'спринт',
-  tag: 'метка',
-  type: 'тип',
-  resolution: 'резолюция',
-  deadline: 'срок',
-  estimate: 'оценка',
-  text: 'текст',
-}
-
-const VALUE_RU: Record<string, string> = {
-  'currentUser()': 'я()',
-  'today()': 'сегодня()',
-  'endOfWeek()': 'конецНедели()',
-  'startOfWeek()': 'началоНедели()',
-  done: 'готово',
-  inprogress: 'в работе',
-  todo: 'ожидает',
-  blocked: 'заблокировано',
-}
-
 function buildQuery(conditions: Condition[], join: 'AND' | 'OR'): string {
   return conditions
     .filter((c) => c.field && c.value)
     .map((c) => {
-      const field = FIELD_RU[c.field] ?? c.field
-      const raw = VALUE_RU[c.value] ?? c.value
+      const field = fieldRu(c.field)
+      const raw = valueRu(c.value)
       const value = raw.includes(' ') && !raw.endsWith(')') ? `"${raw}"` : raw
-      return c.op === 'in' ? `${field} из (${raw})` : `${field} ${c.op} ${value}`
+      return c.op === 'in' ? `${field} из (${valuesRu(raw)})` : `${field} ${c.op} ${value}`
     })
     .join(join === 'AND' ? ' И ' : ' ИЛИ ')
 }
@@ -267,7 +235,7 @@ export function Filters() {
                     ) : null}
                     {field.values.map((v) => (
                       <option key={v} value={v}>
-                        {v}
+                        {valueRu(v)}
                       </option>
                     ))}
                   </select>

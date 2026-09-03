@@ -183,7 +183,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
           ? [
               {
                 title: 'Не проставлены оценки',
-                note: `${tasks.filter((t) => t.estimate === null && t.status.category !== 'done').length} задач без story points`,
+                note: `${tasks.filter((t) => t.estimate === null && t.status.category !== 'done').length} задач без оценки`,
                 level: 'low' as const,
               },
             ]

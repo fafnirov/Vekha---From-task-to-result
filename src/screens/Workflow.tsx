@@ -218,7 +218,7 @@ function WorkflowTab({ manage }: { manage: boolean }) {
     ['workflow'],
   )
 
-  if (!wf) return <Empty icon="account_tree" title="Схем работы нет" text="Создайте очередь — вместе с ней появится воркфлоу." />
+  if (!wf) return <Empty icon="account_tree" title="Схем работы нет" text="Создайте очередь — вместе с ней появится схема работы." />
 
   return (
     <div className="stack">
@@ -557,7 +557,7 @@ function TypesTab({ manage }: { manage: boolean }) {
         </div>
 
         <p className="report__hint" style={{ padding: '0 13px 10px' }}>
-          Тип отличает баг от улучшения в списках и на доске. Удалить можно
+          Тип отличает ошибку от улучшения в списках и на доске. Удалить можно
           только тот, которым никто не пользуется.
         </p>
 
@@ -621,7 +621,7 @@ function TypesTab({ manage }: { manage: boolean }) {
         </div>
 
         <p className="report__hint" style={{ padding: '0 13px 10px' }}>
-          Причина закрытия. Без неё «Done» не отличает решённую задачу от
+          Причина закрытия. Без неё «Готово» не отличает решённую задачу от
           отменённой, и отчёты приписывают команде чужую заслугу.
         </p>
 
@@ -928,7 +928,7 @@ function RuleDialog({
   const [trigger, setTrigger] = useState('status_changed')
   const [queue, setQueue] = useState('')
   const [field, setField] = useState('status')
-  const [value, setValue] = useState('Review')
+  const [value, setValue] = useState('На проверке')
   const [actionType, setActionType] = useState('notify')
   const [actionValue, setActionValue] = useState('')
 
@@ -997,7 +997,7 @@ function RuleDialog({
                 className="input"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder={field === 'overdue' ? 'true' : 'Review'}
+                placeholder={field === 'overdue' ? 'да' : 'На проверке'}
               />
             </label>
           </div>
@@ -1020,7 +1020,7 @@ function RuleDialog({
                 className="input"
                 value={actionValue}
                 onChange={(e) => setActionValue(e.target.value)}
-                placeholder={actionType === 'notify' ? 'текст уведомления' : 'high / Done / код участника'}
+                placeholder={actionType === 'notify' ? 'текст уведомления' : 'Высокий / Готово / код участника'}
               />
             </label>
           </div>

@@ -330,7 +330,20 @@ function resolveDate(raw: string, now: Date): Date | null {
 
 function isEmptyToken(raw: string): boolean {
   const v = raw.toLowerCase()
-  return v === 'empty()' || v === 'null' || v === 'none' || v === '—'
+  return v === 'пусто()' || v === 'empty()' || v === 'null' || v === 'none' || v === '—'
+}
+
+/**
+ * Истинность для полей-флагов.
+ *
+ * Раньше здесь стояло «всё, что не false — истина». С русской записью это
+ * стало ловушкой: `просрочена = нет` не равно 'false', то есть молча
+ * означало бы «да» — противоположное написанному. Ложные написания
+ * перечислены явно, а всё непонятное считается истиной, как и раньше.
+ */
+function isTruthyToken(raw: string): boolean {
+  const v = String(raw).toLowerCase()
+  return !(v === 'false' || v === 'нет' || v === '0' || v === 'no')
 }
 
 /* ── Перевод в where ──────────────────────────────────────────────────── */
@@ -469,7 +482,7 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
           { status: { category: 'done' } },
         ],
       }
-      const wantTrue = String(first).toLowerCase() !== 'false'
+      const wantTrue = isTruthyToken(first)
       const positive = negated ? !wantTrue : wantTrue
       return positive ? isOverdue : notOverdue
     }

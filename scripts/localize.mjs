@@ -38,6 +38,15 @@ const COLUMN = {
 const TYPE = { Баг: 'Ошибка' }
 const RESOLUTION = { Решён: 'Решена', Отклонён: 'Отклонена' }
 
+/** Экран, на котором показывается поле задачи. */
+const SCREEN = { Agile: 'Планирование' }
+
+/** Подписи полей задачи. */
+const FIELD_LABEL = { 'Оценка (SP)': 'Оценка, баллы', Дедлайн: 'Срок' }
+
+/** Имена шаблонов задач. */
+const TEMPLATE = { 'Чек-лист выпуска': 'Контрольный список выпуска', Баг: 'Ошибка' }
+
 const PRIORITY = {
   Critical: 'Критический',
   High: 'Высокий',
@@ -100,6 +109,25 @@ try {
   const resolutionJobs = resolutions.filter((r) => RESOLUTION[r.name])
   for (const r of resolutionJobs) note('резолюция', r.name, RESOLUTION[r.name])
 
+  /* ── Экран поля и шаблоны ─────────────────────────────────────────── */
+  const fields = await prisma.taskField.findMany({ select: { id: true, label: true, screen: true } })
+  const fieldJobs = fields
+    .filter((f) => SCREEN[f.screen] || FIELD_LABEL[f.label])
+    .map((f) => ({
+      id: f.id,
+      label: FIELD_LABEL[f.label] ?? f.label,
+      screen: SCREEN[f.screen] ?? f.screen,
+      was: f,
+    }))
+  for (const f of fieldJobs) {
+    if (f.label !== f.was.label) note('поле', f.was.label, f.label)
+    if (f.screen !== f.was.screen) note(`поле «${f.label}», экран`, f.was.screen, f.screen)
+  }
+
+  const templates = await prisma.taskTemplate.findMany({ select: { id: true, name: true } })
+  const templateJobs = templates.filter((t) => TEMPLATE[t.name])
+  for (const t of templateJobs) note('шаблон', t.name, TEMPLATE[t.name])
+
   /* ── Сохранённые фильтры ──────────────────────────────────────────── */
   const filters = await prisma.savedFilter.findMany({ select: { id: true, name: true, query: true } })
   const filterJobs = []
@@ -152,6 +180,12 @@ try {
     ),
     ...resolutionJobs.map((r) =>
       prisma.resolution.update({ where: { id: r.id }, data: { name: RESOLUTION[r.name] } }),
+    ),
+    ...fieldJobs.map((f) =>
+      prisma.taskField.update({ where: { id: f.id }, data: { label: f.label, screen: f.screen } }),
+    ),
+    ...templateJobs.map((t) =>
+      prisma.taskTemplate.update({ where: { id: t.id }, data: { name: TEMPLATE[t.name] } }),
     ),
     ...filterJobs.map((f) =>
       prisma.savedFilter.update({ where: { id: f.id }, data: { query: f.query } }),

@@ -618,7 +618,7 @@ function describeCondition(raw: string): string {
 /** Кому адресовано уведомление — человеческими словами. */
 const AUDIENCE_LABEL: Record<string, string> = {
   admin: 'администраторов',
-  manager: 'лидов',
+  manager: 'руководителей',
   member: 'участников',
   viewer: 'гостей',
   assignee: 'исполнителя',

@@ -30,7 +30,7 @@ export const DEFAULT_TRANSITIONS: readonly [string, string, string, string][] = 
   ['На проверке', 'Тестирование', 'проверка пройдена', 'member'],
   ['На проверке', 'В работе', 'есть замечания', 'member'],
   ['На проверке', 'Готово', 'проверка пройдена, тесты не нужны', 'manager'],
-  ['Тестирование', 'Готово', 'регресс пройден, чек-лист закрыт', 'manager'],
+  ['Тестирование', 'Готово', 'регресс пройден, контрольный список закрыт', 'manager'],
   ['Тестирование', 'В работе', 'найдены дефекты', 'member'],
   ['Тестирование', 'На проверке', 'нужен повторный просмотр', 'member'],
   ['Готово', 'В работе', 'задача переоткрыта', 'manager'],
@@ -50,8 +50,8 @@ export const DEFAULT_FIELDS = [
   { key: 'title', label: 'Заголовок', type: 'string', icon: 'title', screen: 'Все', required: true, onCard: true, system: true },
   { key: 'description', label: 'Описание', type: 'text', icon: 'description', screen: 'Все', required: false, onCard: false, system: true },
   { key: 'assignee', label: 'Исполнитель', type: 'user', icon: 'person', screen: 'Все', required: false, onCard: true, system: true },
-  { key: 'sprint', label: 'Спринт', type: 'sprint', icon: 'rotate_right', screen: 'Agile', required: false, onCard: true, system: true },
-  { key: 'estimate', label: 'Оценка, баллы', type: 'number', icon: 'straighten', screen: 'Agile', required: false, onCard: true, system: true },
+  { key: 'sprint', label: 'Спринт', type: 'sprint', icon: 'rotate_right', screen: 'Планирование', required: false, onCard: true, system: true },
+  { key: 'estimate', label: 'Оценка, баллы', type: 'number', icon: 'straighten', screen: 'Планирование', required: false, onCard: true, system: true },
   { key: 'dueDate', label: 'Срок', type: 'date', icon: 'calendar_today', screen: 'Все', required: false, onCard: true, system: true },
 ] as const
 
@@ -87,7 +87,7 @@ export const DEFAULT_TEMPLATES = [
     body: 'Описание обмена:\n\nСоответствие полей:\n\nОбработка ошибок:\n\nОграничения:',
   },
   {
-    name: 'Чек-лист выпуска',
+    name: 'Контрольный список выпуска',
     icon: 'checklist',
     tags: ['выпуск', 'проверка'],
     note: 'Регресс, миграции, откат, оповещение поддержки и заказчика.',

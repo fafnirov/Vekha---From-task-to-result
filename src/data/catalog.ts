@@ -70,7 +70,7 @@ export const PRIORITY_ORDER: Record<PriorityName, number> = {
 
 export const ROLE_LABEL: Record<string, string> = {
   admin: 'Админ',
-  manager: 'Лид',
+  manager: 'Руководитель',
   member: 'Участник',
   viewer: 'Гость',
 }

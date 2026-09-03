@@ -10,6 +10,7 @@ import {
   Tag,
   TaskKey,
 } from '../components/ui'
+import { fieldRu, valueRu, valuesRu } from '../data/query-ru'
 import { PRIORITY_KEY, PRIORITY_NAMES, dueColor } from '../data/catalog'
 import {
   useBulkUpdate,
@@ -176,22 +177,21 @@ export function Tasks() {
   const currentQuery = useMemo(() => {
     const parts: string[] = []
     if (view.query.q) parts.push(view.query.q)
-    if (view.query.mine) parts.push('assignee = currentUser()')
-    if (view.query.watching) parts.push('watcher = currentUser()')
-    if (view.query.overdue) parts.push('overdue = true')
-    if (view.query.category) parts.push(`category in (${view.query.category})`)
-    if (view.query.priority) parts.push(`priority in (${view.query.priority})`)
-    if (view.query.sprint) parts.push(`sprint = "${view.query.sprint}"`)
+    if (view.query.mine) parts.push('исполнитель = я()')
+    if (view.query.watching) parts.push('наблюдатель = я()')
+    if (view.query.overdue) parts.push('просрочена = да')
+    if (view.query.category) parts.push(`категория из (${valuesRu(view.query.category)})`)
+    if (view.query.priority) parts.push(`приоритет из (${view.query.priority})`)
+    if (view.query.sprint) parts.push(`спринт = "${view.query.sprint}"`)
 
     const quote = (value: string) => (value.includes(' ') ? `"${value}"` : value)
     for (const [key, value] of Object.entries(urlFilters)) {
       if (key === 'q') parts.push(value)
-      else if (key === 'assignee') parts.push(`assignee = ${quote(value)}`)
-      else parts.push(`${key} = ${quote(value)}`)
+      else parts.push(`${fieldRu(key)} = ${quote(valueRu(value))}`)
     }
-    if (debounced.trim()) parts.push(`text ~ "${debounced.trim()}"`)
+    if (debounced.trim()) parts.push(`текст ~ "${debounced.trim()}"`)
 
-    return parts.join(' AND ')
+    return parts.join(' И ')
   }, [view, urlFilters, debounced])
 
   const saveView = useApiMutation<Record<string, unknown>, unknown>(
@@ -408,7 +408,7 @@ export function Tasks() {
               <button
                 type="button"
                 className="chip__x"
-                aria-label={`Убрать фильтр ${key}`}
+                aria-label={`Убрать фильтр «${(CHIP_LABEL[key] ?? key).replace(':', '')}»`}
                 onClick={() => setFilter(key, null)}
               >
                 <Icon name="close" size={14} />

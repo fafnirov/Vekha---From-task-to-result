@@ -13,7 +13,7 @@ export const ROLE_RANK: Record<Role, number> = {
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: 'Админ',
-  manager: 'Лид',
+  manager: 'Руководитель',
   member: 'Участник',
   viewer: 'Гость',
 }
@@ -70,7 +70,7 @@ export const PROJECT_STATE_LABEL: Record<string, string> = {
   planned: 'запланирован',
   active: 'в работе',
   risk: 'риск',
-  release: 'релиз',
+  release: 'выпуск',
   done: 'завершён',
 }
 

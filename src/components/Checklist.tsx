@@ -47,7 +47,7 @@ export function Checklist({ taskKey, editable }: { taskKey: string; editable: bo
   return (
     <section className="card card--clip" style={{ marginTop: 12 }}>
       <div className="card__head">
-        <div className="card__title">Чек-лист</div>
+        <div className="card__title">Контрольный список</div>
         {list.length > 0 && (
           <>
             <span className="count-pill">
@@ -63,7 +63,7 @@ export function Checklist({ taskKey, editable }: { taskKey: string; editable: bo
         )}
       </div>
 
-      {list.length === 0 && !editable && <div className="task__none">Чек-листа нет</div>}
+      {list.length === 0 && !editable && <div className="task__none">Пунктов пока нет</div>}
 
       {list.map((item) => (
         <div key={item.id} className="checkitem">

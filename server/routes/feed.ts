@@ -30,7 +30,7 @@ const notificationInclude = {
 /** Причины попадания задачи в список «Требует внимания». */
 const REASONS = {
   overdue: { reason: 'просрочено', icon: 'schedule', bg: 'var(--dang-bg)', fg: 'var(--dang)', bar: 'var(--dang)' },
-  blocked: { reason: 'blocked', icon: 'block', bg: 'var(--dang-bg)', fg: 'var(--dang)', bar: 'var(--dang)' },
+  blocked: { reason: 'заблокировано', icon: 'block', bg: 'var(--dang-bg)', fg: 'var(--dang)', bar: 'var(--dang)' },
   today: { reason: 'срок сегодня', icon: 'today', bg: 'var(--warn-bg)', fg: 'var(--warn)', bar: 'var(--warn)' },
   soon: { reason: 'срок близко', icon: 'event', bg: 'var(--warn-bg)', fg: 'var(--warn)', bar: 'var(--warn)' },
   mention: { reason: 'упоминание', icon: 'alternate_email', bg: 'var(--ac-soft)', fg: 'var(--ac-tx)', bar: 'var(--ac)' },

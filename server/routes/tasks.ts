@@ -690,7 +690,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       events.push({
         kind: 'estimate',
         field: 'estimate',
-        note: `установил(а) оценку ${body.estimate ?? 0} SP`,
+        note: `установил(а) оценку ${body.estimate ?? 0}`,
       })
     }
 

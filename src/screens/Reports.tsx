@@ -74,7 +74,7 @@ export function Reports() {
           {/* ── Burndown ─────────────────────────────────────────────── */}
           <section className="card card--pad">
             <SectionTitle right={<span className="mono report__hint">{burndown.data?.sprint ?? '—'}</span>}>
-              Burndown спринта
+              Сгорание спринта
             </SectionTitle>
             <Burndown points={burndown.data?.points ?? []} total={burndown.data?.total ?? 0} />
           </section>
