@@ -163,13 +163,33 @@
   flex: none;
 }
 
+/*
+ * Поле ввода комментария: аватар слева, текст справа — как у самих
+ * комментариев выше.
+ *
+ * Базового правила у класса не было вовсе: остались только переход и
+ * подсветка при фокусе, красившая рамку, которую никто не объявлял.
+ * Без display: flex аватар вставал отдельной строкой над полем, а
+ * `flex: 1` у соседа не работал — флекс-свойства действуют только
+ * внутри флекс-контейнера. Отступов тоже не было, и поле распирало
+ * карточку от края до края.
+ */
 .composer {
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border-top: 1px solid var(--border);
+  transition: border-color 160ms ease;
 }
 
+/*
+ * Подсвечивается разделитель, а не кольцо вокруг блока: своё кольцо уже
+ * рисует .textarea:focus, а внешнее всё равно срезал бы overflow
+ * у карточки.
+ */
 .composer:focus-within {
-  border-color: var(--ac) !important;
-  box-shadow: var(--ring);
+  border-top-color: var(--ac);
 }
 
 /* Backlog ------------------------------------------------------------ */
@@ -185,7 +205,14 @@
 
 /* Gantt --------------------------------------------------------------- */
 
+/*
+ * Шапка с месяцами. Колонки ей задаёт разметка инлайном, но самого
+ * `display: grid` тут не было — подписи сваливались в одну строку у
+ * левого края и указывали не на свои столбцы.
+ */
 .gantt__track {
+  display: grid;
+  align-items: center;
   position: relative;
   background: repeating-linear-gradient(
     90deg,
@@ -294,11 +321,16 @@
 
 .chart-bar {
   width: 100%;
+  /* Заливки не было вовсе — столбики выходили невидимыми, и график
+     выглядел незагрузившимся: только цифры сверху и подписи снизу. */
+  background: var(--ac);
   border-radius: 5px 5px 2px 2px;
   transform-origin: bottom;
   animation: vk-grow 480ms cubic-bezier(0.2, 0.8, 0.3, 1);
   cursor: pointer;
   transition: filter 150ms ease;
+  /* Неделя без закрытых задач всё равно должна быть видна как основание. */
+  min-height: 2px;
 }
 
 .chart-bar:hover {
@@ -435,11 +467,6 @@
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .sticky-aside {
-    position: static;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-  }
 }
 
 @media (max-width: 860px) {

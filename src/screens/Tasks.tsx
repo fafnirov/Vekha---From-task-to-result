@@ -11,7 +11,7 @@ import {
   TaskKey,
 } from '../components/ui'
 import { fieldRu, valueRu, valuesRu } from '../data/query-ru'
-import { PRIORITY_KEY, PRIORITY_NAMES, dueColor } from '../data/catalog'
+import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, plural } from '../data/catalog'
 import {
   useBulkUpdate,
   useFilters,
@@ -425,7 +425,7 @@ export function Tasks() {
           />
 
           <div className="tasks__count spacer">
-            <span className="mono">{total}</span> задач
+            <span className="mono">{total}</span> {plural(total, 'задача', 'задачи', 'задач')}
             {tasks.isFetching && <Icon name="progress_activity" size={14} color="var(--tx3)" />}
           </div>
         </div>
@@ -529,9 +529,15 @@ export function Tasks() {
             ))}
           </div>
 
+          {/* Колонки те же, что у настоящей строки: иначе полосы стоят
+              не под своими заголовками, а при прокрутке вбок обрываются. */}
           {tasks.isLoading &&
             SKELETON_WIDTHS.map((w, i) => (
-              <div key={i} className="row-skeleton">
+              <div
+                key={i}
+                className="row-skeleton"
+                style={{ gridTemplateColumns: gridCols, minWidth: gridMin }}
+              >
                 <div className="row-skeleton__box" />
                 <div className="skel" style={{ width: 64 }} />
                 <div className="skel" style={{ width: w }} />
@@ -574,13 +580,13 @@ export function Tasks() {
                       <Tag key={tg}>{tg}</Tag>
                     ))}
                     {t.comments > 0 && (
-                      <span className="row__meta" title={`${t.comments} комментариев`}>
+                      <span className="row__meta" title={`${t.comments} ${plural(t.comments, 'комментарий', 'комментария', 'комментариев')}`}>
                         <Icon name="chat" size={13} />
                         {t.comments}
                       </span>
                     )}
                     {t.subtasks > 0 && (
-                      <span className="row__meta" title={`${t.subtasks} подзадач`}>
+                      <span className="row__meta" title={`${t.subtasks} ${plural(t.subtasks, 'подзадача', 'подзадачи', 'подзадач')}`}>
                         <Icon name="account_tree" size={13} />
                         {t.subtasks}
                       </span>
@@ -614,6 +620,7 @@ export function Tasks() {
             })}
 
           {!tasks.isLoading && rows.length === 0 && (
+            <div style={{ minWidth: gridMin }}>
             <Empty
               title="Ничего не найдено"
               text="Под выбранные условия не подошла ни одна задача. Измените поиск или снимите часть фильтров."
@@ -631,11 +638,14 @@ export function Tasks() {
                 </button>
               }
             />
+            </div>
           )}
 
-          <div className="tasks__foot">
+          {/* Ширина как у строк: иначе подвал остаётся на месте, пока
+              таблица едет вбок, и уезжает за левый край. */}
+          <div className="tasks__foot" style={{ minWidth: gridMin }}>
             <span style={{ fontSize: 12, color: 'var(--tx3)' }}>
-              Показано {rows.length} из {total}
+              {tasks.isLoading ? 'Загружаем…' : `Показано ${rows.length} из ${total}`}
             </span>
             <div className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
               <button

@@ -468,12 +468,4 @@
   gap: 12px;
   min-width: 0;
 }
-
-.sticky-aside {
-  position: sticky;
-  top: 0;
-  padding: 14px 16px 30px;
-  border-left: 1px solid var(--border);
-  background: var(--surface);
-  min-height: 100%;
-}
+

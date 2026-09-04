@@ -16,11 +16,19 @@ import { useSession } from '../store/session'
 import { useUi } from '../store/ui'
 import type { AttentionKind } from '../data/types'
 
+/*
+ * Вкладки повторяют виды поводов с сервера (REASONS в routes/feed.ts).
+ * Двух не хватало — «срок близко» и «ждёт решения», — и строки этих
+ * видов не открывались ни одной вкладкой: их было видно только на «Всё»,
+ * и никакая вкладка их не объясняла.
+ */
 const ATTENTION_TABS: { value: 'all' | AttentionKind; label: string }[] = [
   { value: 'all', label: 'Всё' },
   { value: 'overdue', label: 'Просрочено' },
   { value: 'blocked', label: 'Блокировки' },
   { value: 'today', label: 'Сегодня' },
+  { value: 'soon', label: 'Срок близко' },
+  { value: 'review', label: 'Ждёт решения' },
   { value: 'mention', label: 'Упоминания' },
   { value: 'noassignee', label: 'Без исполнителя' },
 ]
@@ -35,6 +43,14 @@ export function Home() {
   const data = dashboard.data
   const reasons = data?.reasons
 
+  /*
+   * Пока сводка не пришла, экран не имеет права утверждать, что всё
+   * хорошо. Раньше отсутствие данных читалось как «просрочек нет,
+   * задач нет, проектов нет» — и через долю секунды всё это разом
+   * подменялось настоящими цифрами.
+   */
+  const loading = dashboard.isLoading
+
   const attention = (data?.attention ?? []).filter((a) => tab === 'all' || a.kind === tab)
 
   const hour = new Date().getHours()
@@ -48,7 +64,7 @@ export function Home() {
             {greeting}, {me?.name.split(' ')[0]}
           </div>
           <div className="page__note" style={{ marginLeft: 0 }}>
-            {data?.sprint
+            {loading ? '' : data?.sprint
               ? `${data.sprint.name} · осталось ${data.sprint.daysLeft} дн.`
               : 'Активного спринта нет'}
           </div>
@@ -81,7 +97,7 @@ export function Home() {
           <section className="card card--clip">
             <div className="card__head">
               <div className="card__title">Требует внимания</div>
-              <span className="count-pill">{data?.attention.length ?? 0}</span>
+              <span className="count-pill">{attention.length}</span>
               <div className="spacer home__tabs">
                 {ATTENTION_TABS.map((t) => (
                   <button
@@ -96,11 +112,17 @@ export function Home() {
               </div>
             </div>
 
-            {attention.length === 0 && (
+            {loading && <div className="skel skel--block" style={{ height: 120, margin: 13 }} />}
+
+            {!loading && attention.length === 0 && (
               <Empty
                 icon="task_alt"
-                title="Всё под контролем"
-                text="Нет просрочек, блокировок и задач без исполнителя по выбранному фильтру."
+                title={tab === 'all' ? 'Всё под контролем' : 'По этому фильтру ничего нет'}
+                text={
+                  tab === 'all'
+                    ? 'Нет просрочек, блокировок и задач без исполнителя.'
+                    : 'Выберите «Всё», чтобы увидеть остальные поводы.'
+                }
               />
             )}
 
@@ -144,7 +166,9 @@ export function Home() {
               </button>
             </div>
 
-            {(data?.myTasks.length ?? 0) === 0 && (
+            {loading && <div className="skel skel--block" style={{ height: 96, margin: 13 }} />}
+
+            {!loading && (data?.myTasks.length ?? 0) === 0 && (
               <Empty icon="assignment_turned_in" title="Пусто" text="На вас сейчас нет открытых задач." />
             )}
 
@@ -180,7 +204,9 @@ export function Home() {
               Мои проекты
             </SectionTitle>
 
-            {(data?.projects ?? []).length === 0 ? (
+            {loading ? (
+              <div className="skel skel--block" style={{ height: 72 }} />
+            ) : (data?.projects ?? []).length === 0 ? (
               /* Пустой блок читался бы как «проектов нет», хотя они есть —
                  просто ни один не ваш. */
               <Empty
@@ -217,7 +243,7 @@ export function Home() {
         </div>
 
         {/* ── Правая колонка ─────────────────────────────────────────── */}
-        <aside className="stack sticky-aside">
+        <aside className="stack">
           {data?.sprint && (
             <section className="card card--pad">
               <SectionTitle>Спринт</SectionTitle>
@@ -266,7 +292,9 @@ export function Home() {
             <div className="card__head">
               <div className="card__title">Упоминания и проверка</div>
             </div>
-            {(data?.mentions.length ?? 0) === 0 && <div className="home__none">Пока ничего</div>}
+            {!loading && (data?.mentions.length ?? 0) === 0 && (
+              <div className="home__none">Пока ничего</div>
+            )}
             {(data?.mentions ?? []).map((m) => (
               <Link key={m.id} to={m.key ? `/tasks/${m.key}` : '/'} className="home__mention">
                 <Avatar id={m.who} size="md" />
@@ -289,27 +317,36 @@ export function Home() {
             <div className="card__head">
               <div className="card__title">Активность</div>
             </div>
+            {!loading && (data?.activity ?? []).length === 0 && (
+              <div className="home__none">Пока ничего</div>
+            )}
+
+            {(data?.activity ?? []).length > 0 && (
             <div className="tl" style={{ padding: '10px 13px 13px' }}>
-              {(data?.activity ?? []).map((a) => (
-                <div key={a.id} className="tl__rail">
-                  <span className="tl__dot" style={{ background: a.bg, color: a.fg }}>
-                    <Icon name={a.icon} size={13} />
+              {(data?.activity ?? []).map((a, i) => (
+                <div key={a.id} className="tl__item">
+                  <span className="tl__rail">
+                    <span className="tl__dot" style={{ background: a.bg, color: a.fg }}>
+                      <Icon name={a.icon} size={13} />
+                    </span>
+                    {i < (data?.activity ?? []).length - 1 && <span className="tl__line" />}
                   </span>
-                  <span className="tl__line" />
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ fontSize: 12 }}>
+                  <span className="tl__body">
+                    <span style={{ fontSize: 12, lineHeight: 1.45 }}>
                       <b style={{ fontWeight: 600 }}>{a.who}</b> {a.what}
                     </span>
                     <span className="tl__meta">
                       <Link to={`/tasks/${a.key}`} className="mono">
                         {a.key}
                       </Link>
-                      <span> · {a.time}</span>
+                      <span>·</span>
+                      <span>{a.time}</span>
                     </span>
                   </span>
                 </div>
               ))}
             </div>
+            )}
           </section>
         </aside>
       </div>

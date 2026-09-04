@@ -631,13 +631,15 @@ export function TaskDetail() {
 
             {(tab === 'history' || tab === 'all') && (
               <div className="tl" style={{ marginTop: tab === 'all' ? 14 : 0 }}>
-                {(history.data ?? []).map((h) => (
-                  <div key={h.id} className="tl__rail">
-                    <span className="tl__dot" style={{ background: h.bg, color: h.fg }}>
-                      <Icon name={h.icon} size={13} />
+                {(history.data ?? []).map((h, i) => (
+                  <div key={h.id} className="tl__item">
+                    <span className="tl__rail">
+                      <span className="tl__dot" style={{ background: h.bg, color: h.fg }}>
+                        <Icon name={h.icon} size={13} />
+                      </span>
+                      {i < (history.data ?? []).length - 1 && <span className="tl__line" />}
                     </span>
-                    <span className="tl__line" />
-                    <span style={{ minWidth: 0 }}>
+                    <span className="tl__body">
                       <span style={{ fontSize: 12 }}>
                         <b style={{ fontWeight: 600 }}>{h.who}</b> {h.what}
                         {h.from && h.to && (

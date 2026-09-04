@@ -288,6 +288,26 @@
   font-size: 10px;
 }
 
+/*
+ * Метка-кнопка должна выглядеть нажимаемой. В выпадающем меню фильтра
+ * значения очередей и статусов — единственный способ его применить, а
+ * курсор над ними оставался стрелкой и при наведении не менялось
+ * ничего: люди принимали их за подписи и закрывали меню.
+ */
+button.tag,
+a.tag {
+  cursor: pointer;
+  transition: background var(--t-fast) ease, border-color var(--t-fast) ease,
+    color var(--t-fast) ease;
+}
+
+button.tag:hover,
+a.tag:hover {
+  background: var(--surface2);
+  border-color: var(--border2);
+  color: var(--tx);
+}
+
 .count-pill {
   font-family: var(--mono);
   font-size: 11px;
@@ -931,11 +951,24 @@
 
 /* Timeline (activity / history / milestones) ------------------------------ */
 
+/*
+ * Лента событий: слева дорожка с кружком и линией, справа текст.
+ *
+ * Раньше сеткой на две колонки был объявлен весь список, а каждая
+ * запись оставалась одним элементом. Поэтому записи ложились в колонки
+ * по очереди — первая в узкую двадцатидвухпиксельную, вторая в широкую,
+ * третья снова в узкую — и текст наезжал сам на себя. Сетка теперь у
+ * записи, а не у списка.
+ */
 .tl {
+  display: flex;
+  flex-direction: column;
+}
+
+.tl__item {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 10px;
-  padding-bottom: 13px;
 }
 
 .tl__rail {
@@ -943,6 +976,18 @@
   flex-direction: column;
   align-items: center;
   gap: 3px;
+}
+
+.tl__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 14px;
+}
+
+/* У последней записи линия обрывается — вести её в пустоту незачем. */
+.tl__item:last-child .tl__body {
+  padding-bottom: 0;
 }
 
 .tl__dot {
@@ -969,6 +1014,15 @@
 .tl__meta {
   font-size: 11px;
   color: var(--tx3);
-  margin-top: 2px;
+  margin-top: 3px;
   font-family: var(--mono);
+  /*
+   * Строка со ссылкой и временем — отдельная. Как строчный элемент она
+   * прилипала к концу предыдущего предложения, и получалось
+   * «перенёс карточку на доскеKAVO-1».
+   */
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
 }

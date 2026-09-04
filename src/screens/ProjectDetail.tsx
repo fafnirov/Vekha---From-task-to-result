@@ -150,13 +150,15 @@ export function ProjectDetail() {
             {milestones.length === 0 && <div className="task__none">Вех пока нет</div>}
 
             <div className="tl">
-              {milestones.map((m) => (
-                <div key={m.id} className="tl__rail">
-                  <span className="tl__dot" style={{ background: m.bg, color: m.fg }}>
-                    <Icon name={m.icon} size={13} />
+              {milestones.map((m, i) => (
+                <div key={m.id} className="tl__item">
+                  <span className="tl__rail">
+                    <span className="tl__dot" style={{ background: m.bg, color: m.fg }}>
+                      <Icon name={m.icon} size={13} />
+                    </span>
+                    {i < milestones.length - 1 && <span className="tl__line" />}
                   </span>
-                  <span className="tl__line" />
-                  <span style={{ minWidth: 0, flex: 1 }}>
+                  <span className="tl__body">
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <b style={{ fontSize: 13 }}>{m.title}</b>
                       <span className="badge badge--sm" style={{ background: m.bg, color: m.fg }}>

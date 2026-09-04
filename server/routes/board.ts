@@ -271,7 +271,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
         taskId: task.id,
         actorId: req.user!.id,
         kind: 'status',
-        note: 'перенёс(ла) карточку на доске',
+        note: `перенёс(ла) карточку в «${nextStatusName}»`,
         field: 'status',
         fromValue: task.status.name,
         toValue: nextStatusName,

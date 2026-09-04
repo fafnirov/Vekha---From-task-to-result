@@ -94,6 +94,15 @@ export function Board() {
       buckets.get(id)!.keys.add(task.key)
     }
 
+    /*
+     * Дорожки строятся из задач, поэтому при пустой выборке их не
+     * получалось ни одной — и доска пропадала целиком: ни колонок, ни
+     * надписи «Пусто». Возвращаем общую дорожку, как при выключенной
+     * группировке: колонки останутся на месте и честно скажут, что в
+     * них ничего нет.
+     */
+    if (buckets.size === 0) return all
+
     const order = ['critical', 'high', 'medium', 'low']
     const list = [...buckets.values()].sort((a, b) => {
       if (groupBy === 'priority') return order.indexOf(a.id) - order.indexOf(b.id)
