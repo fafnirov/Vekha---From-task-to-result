@@ -61,7 +61,18 @@ const TASK_INCLUDE = {
   assignee: { select: { id: true, code: true } },
   author: { select: { id: true, code: true } },
   project: { select: { id: true, name: true } },
-  team: { select: { id: true, name: true, abbr: true, bg: true, fg: true } },
+  /* members нужен проверке видимости: задачу, поручённую команде, видят
+     только её участники. */
+  team: {
+    select: {
+      id: true,
+      name: true,
+      abbr: true,
+      bg: true,
+      fg: true,
+      members: { select: { userId: true } },
+    },
+  },
   sprint: { select: { id: true, name: true } },
   parent: { select: { key: true, title: true } },
   tags: { include: { tag: true } },

@@ -30,11 +30,9 @@ export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
 
   return {
     OR: [
-      { queue: { access: { in: allowed } } },
-      // Владелец видит свою очередь независимо от уровня доступа.
-      { queue: { ownerId: user.id } },
       /*
-       * Своя работа видна всегда, в какой бы очереди ни лежала.
+       * Своя работа видна всегда: в какой бы очереди ни лежала и какой
+       * бы команде ни была поручена.
        *
        * Без этого назначение молча ничего не делало: задачу поручали
        * человеку в закрытой для него очереди, в списках она не
@@ -45,6 +43,29 @@ export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
       { assigneeId: user.id },
       { authorId: user.id },
       { watchers: { some: { userId: user.id } } },
+
+      /*
+       * Всё прочее — если очередь открыта И задача не отдана чужой
+       * команде. Команда сужает видимость внутри очереди: поручённое
+       * команде видит она, а не все, кому очередь доступна.
+       */
+      {
+        AND: [
+          {
+            OR: [
+              { queue: { access: { in: allowed } } },
+              // Владелец видит свою очередь независимо от уровня доступа.
+              { queue: { ownerId: user.id } },
+            ],
+          },
+          {
+            OR: [
+              { teamId: null },
+              { team: { members: { some: { userId: user.id } } } },
+            ],
+          },
+        ],
+      },
     ],
   }
 }
@@ -75,12 +96,23 @@ export function canSeeTask(
     assigneeId?: string | null
     authorId?: string
     watchers?: { userId: string }[]
+    teamId?: string | null
+    team?: { members: { userId: string }[] } | null
   },
 ): boolean {
-  if (canSeeQueue(user, task.queue)) return true
+  // Своё — всегда, никакие ограничения этого не отменяют.
   if (task.assigneeId === user.id) return true
   if (task.authorId === user.id) return true
-  return (task.watchers ?? []).some((w) => w.userId === user.id)
+  if ((task.watchers ?? []).some((w) => w.userId === user.id)) return true
+
+  if (user.role === 'admin') return true
+  if (!canSeeQueue(user, task.queue)) return false
+
+  // Задача, поручённая команде, видна только её участникам.
+  if (task.teamId) {
+    return (task.team?.members ?? []).some((m) => m.userId === user.id)
+  }
+  return true
 }
 
 /** Условие видимости для выборок по очередям. */
