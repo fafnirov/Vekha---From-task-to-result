@@ -74,6 +74,7 @@ const createBody = z.object({
   priority: z.enum(PRIORITIES).default('medium'),
   assignee: z.string().nullable().optional(),
   project: z.string().nullable().optional(),
+  team: z.string().nullable().optional(),
   sprint: z.string().nullable().optional(),
   status: z.string().optional(),
   dueDate: z.string().nullable().optional(),
@@ -90,6 +91,7 @@ const patchBody = z.object({
   priority: z.enum(PRIORITIES).optional(),
   assignee: z.string().nullable().optional(),
   project: z.string().nullable().optional(),
+  team: z.string().nullable().optional(),
   sprint: z.string().nullable().optional(),
   dueDate: z.string().nullable().optional(),
   estimate: z.number().int().min(0).max(999).nullable().optional(),
@@ -340,6 +342,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           select: { id: true },
         })
       : null
+    const team = body.team
+      ? await prisma.team.findFirst({
+          where: { OR: [{ id: body.team }, { name: body.team }] },
+          select: { id: true },
+        })
+      : null
     const parent = body.parentKey
       ? await prisma.task.findUnique({
           where: { key: body.parentKey.toUpperCase() },
@@ -388,6 +396,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         assigneeId,
         authorId: req.user!.id,
         projectId: project?.id ?? null,
+        teamId: team?.id ?? null,
         sprintId: sprint?.id ?? null,
         parentId: parent?.id ?? null,
         dueDate: toDate(body.dueDate) ?? null,
@@ -445,6 +454,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         resolution: true,
         queue: { include: { workflow: true } },
         watchers: { select: { userId: true } },
+        team: { select: { name: true, members: { select: { userId: true } } } },
         assignee: { select: { name: true } },
         project: { select: { name: true } },
         sprint: { select: { name: true } },
@@ -658,6 +668,25 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    if (body.team !== undefined) {
+      const team = body.team
+        ? await prisma.team.findFirst({
+            where: { OR: [{ id: body.team }, { name: body.team }] },
+            select: { id: true, name: true },
+          })
+        : null
+      if ((team?.id ?? null) !== task.teamId) {
+        data.team = team ? { connect: { id: team.id } } : { disconnect: true }
+        events.push({
+          kind: 'project',
+          field: 'team',
+          note: 'сменил(а) команду',
+          from: task.team?.name ?? '—',
+          to: team?.name ?? '—',
+        })
+      }
+    }
+
     if (body.sprint !== undefined) {
       const sprint = body.sprint
         ? await prisma.sprint.findFirst({
@@ -755,6 +784,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       include: {
         queue: { select: { access: true, ownerId: true } },
         watchers: { select: { userId: true } },
+        team: { select: { members: { select: { userId: true } } } },
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })

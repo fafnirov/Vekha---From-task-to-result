@@ -61,6 +61,7 @@ const TASK_INCLUDE = {
   assignee: { select: { id: true, code: true } },
   author: { select: { id: true, code: true } },
   project: { select: { id: true, name: true } },
+  team: { select: { id: true, name: true, abbr: true, bg: true, fg: true } },
   sprint: { select: { id: true, name: true } },
   parent: { select: { key: true, title: true } },
   tags: { include: { tag: true } },
@@ -98,6 +99,12 @@ export interface TaskDto {
   authorId: string
   project: string
   projectId: string | null
+  /** Команда, которой поручена задача. Задана — видит только она. */
+  team: string | null
+  teamId: string | null
+  teamAbbr: string | null
+  teamBg: string | null
+  teamFg: string | null
   queue: string
   queueId: string
   sprint: string
@@ -144,6 +151,11 @@ export function taskDto(t: TaskRow, now = new Date()): TaskDto {
     authorId: t.authorId,
     project: t.project?.name ?? DASH,
     projectId: t.projectId,
+    team: t.team?.name ?? null,
+    teamId: t.teamId,
+    teamAbbr: t.team?.abbr ?? null,
+    teamBg: t.team?.bg ?? null,
+    teamFg: t.team?.fg ?? null,
     queue: t.queue.key,
     queueId: t.queueId,
     sprint: t.sprint?.name ?? DASH,

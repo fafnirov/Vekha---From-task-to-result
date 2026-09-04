@@ -8,6 +8,7 @@ import {
   useFields,
   useProjects,
   useQueues,
+  useTeams,
   useSprints,
   useTaskTypes,
   useTemplates,
@@ -29,6 +30,7 @@ export function CreateTaskModal() {
   const sprints = useSprints()
   const templates = useTemplates()
   const taskTypes = useTaskTypes()
+  const teams = useTeams()
   const create = useCreateTask()
   const fields = useFields()
 
@@ -52,6 +54,7 @@ export function CreateTaskModal() {
   const [dueDate, setDueDate] = useState('')
   const [estimate, setEstimate] = useState('')
   const [project, setProject] = useState('')
+  const [team, setTeam] = useState('')
   const [sprint, setSprint] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -132,6 +135,7 @@ export function CreateTaskModal() {
         type: type || null,
         assignee: assignee || null,
         project: project || null,
+        team: team || null,
         sprint: sprint || null,
         dueDate: dueDate || null,
         estimate: estimate === '' ? null : Number(estimate),
@@ -303,6 +307,22 @@ export function CreateTaskModal() {
                 {queueProjects.map((p) => (
                   <option key={p.id} value={p.name}>
                     {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="label">
+              <span>Команда</span>
+              <select
+                className="select"
+                value={team}
+                onChange={(e) => setTeam(e.target.value)}
+                title="Поручённую команде задачу видит только она"
+              >
+                <option value="">Без команды</option>
+                {(teams.data ?? []).map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}
                   </option>
                 ))}
               </select>

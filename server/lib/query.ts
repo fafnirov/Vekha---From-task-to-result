@@ -107,6 +107,7 @@ const FIELD_ALIAS: Record<string, string> = {
   исполнитель: 'assignee',
   автор: 'author',
   проект: 'project',
+  команда: 'team',
   спринт: 'sprint',
   тип: 'type',
   резолюция: 'resolution',
@@ -394,6 +395,10 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
     case 'project':
       if (isEmptyToken(first)) return wrap({ projectId: null })
       return wrap({ project: { name: { in: values } } })
+
+    case 'team':
+      if (isEmptyToken(first)) return wrap({ teamId: null })
+      return wrap({ team: { name: { in: values } } })
 
     case 'sprint':
       if (isEmptyToken(first)) return wrap({ sprintId: null })

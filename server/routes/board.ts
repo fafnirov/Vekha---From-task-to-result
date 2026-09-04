@@ -126,6 +126,7 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
         status: true,
         queue: { select: { workflowId: true, access: true, ownerId: true } },
         watchers: { select: { userId: true } },
+        team: { select: { members: { select: { userId: true } } } },
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })

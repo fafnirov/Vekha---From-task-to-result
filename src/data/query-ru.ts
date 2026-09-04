@@ -21,6 +21,7 @@ export const FIELD_RU: Record<string, string> = {
   assignee: 'исполнитель',
   author: 'автор',
   project: 'проект',
+  team: 'команда',
   sprint: 'спринт',
   tag: 'метка',
   type: 'тип',

@@ -24,6 +24,7 @@ import {
   useHistory,
   useInvalidate,
   useProjects,
+  useTeams,
   useSprints,
   useTask,
   useTaskTypes,
@@ -52,6 +53,7 @@ export function TaskDetail() {
   const comments = useComments(key)
   const history = useHistory(key)
   const projects = useProjects()
+  const teams = useTeams()
   const sprints = useSprints()
   const taskTypes = useTaskTypes()
   const update = useUpdateTask()
@@ -837,6 +839,23 @@ export function TaskDetail() {
               {(projects.data ?? []).map((p) => (
                 <option key={p.id} value={p.name}>
                   {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Команда">
+            <select
+              className="select"
+              value={task.teamId ? (task.team ?? '') : ''}
+              disabled={!editable}
+              onChange={(e) => void patch({ team: e.target.value || null }, 'Команда изменена')}
+              title="Задача, поручённая команде, видна только её участникам"
+            >
+              <option value="">Без команды</option>
+              {(teams.data ?? []).map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
                 </option>
               ))}
             </select>

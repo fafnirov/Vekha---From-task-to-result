@@ -74,6 +74,12 @@ export interface Task {
   authorId: string
   project: string
   projectId: string | null
+  /** Команда, которой поручена задача. Задана — видит только она. */
+  team: string | null
+  teamId: string | null
+  teamAbbr: string | null
+  teamBg: string | null
+  teamFg: string | null
   queue: string
   queueId: string
   sprint: string
