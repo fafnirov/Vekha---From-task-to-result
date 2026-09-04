@@ -57,6 +57,10 @@ export function Backlog() {
     ({ id, moveTo }) => api.post(`/api/sprints/${id}/close`, { moveTo }),
     ['sprints', 'tasks', 'board'],
   )
+  const dropSprint = useApiMutation<string, { name: string; released: number }>(
+    (id) => api.del(`/api/sprints/${id}`),
+    ['sprints', 'tasks', 'board'],
+  )
   const createSprint = useApiMutation<Record<string, unknown>, unknown>(
     (body) => api.post('/api/sprints', body),
     ['sprints'],
@@ -212,6 +216,42 @@ export function Backlog() {
                 }
               >
                 Завершить спринт
+              </button>
+            )}
+
+            {/*
+              Удаление спринта задачи не трогает: они возвращаются в
+              бэклог. Об этом сказано прямо в вопросе — иначе кнопка
+              рядом с «завершить» читается как «удалить вместе с работой».
+            */}
+            {manage && sprint && (
+              <button
+                type="button"
+                className={
+                  sprint.state === 'closed'
+                    ? 'btn btn--icon-quiet spacer'
+                    : 'btn btn--icon-quiet'
+                }
+                title="Удалить спринт"
+                aria-label={`Удалить спринт ${sprint.name}`}
+                onClick={() => {
+                  const n = sprintTasks.length
+                  const tail = n > 0 ? ` ${n} задач вернутся в бэклог — они не удалятся.` : ''
+                  if (!window.confirm(`Удалить спринт «${sprint.name}»?${tail}`)) return
+                  void dropSprint
+                    .mutateAsync(sprint.id)
+                    .then((r) => {
+                      setParam('sprint', '')
+                      toast(
+                        'Спринт удалён',
+                        r.released > 0 ? `Задач вернулось в бэклог: ${r.released}` : sprint.name,
+                        'ok',
+                      )
+                    })
+                    .catch(toastError)
+                }}
+              >
+                <Icon name="delete" size={16} />
               </button>
             )}
           </div>

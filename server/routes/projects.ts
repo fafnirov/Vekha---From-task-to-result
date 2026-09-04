@@ -305,12 +305,28 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string }
     const target = await prisma.project.findFirst({
       where: { AND: [{ id }, projectScope(req.user!)] },
-      select: { id: true },
+      select: {
+        id: true,
+        name: true,
+        _count: { select: { tasks: true, milestones: true } },
+      },
     })
     if (!target) return reply.code(404).send({ error: 'Проект не найден' })
+
+    /*
+     * Задачи переживают удаление проекта: связь обнуляется, и они просто
+     * остаются без проекта. Вехи уходят вместе с ним — сами по себе они
+     * ничего не значат. Ответ называет и то и другое, чтобы интерфейсу
+     * было чем отчитаться.
+     */
     await prisma.project.delete({ where: { id } }).catch(() => undefined)
     emitChanges(['projects', 'tasks'])
-    return { ok: true }
+    return {
+      ok: true,
+      name: target.name,
+      released: target._count.tasks,
+      milestones: target._count.milestones,
+    }
   })
 
   /* ── Вехи ─────────────────────────────────────────────────────────── */

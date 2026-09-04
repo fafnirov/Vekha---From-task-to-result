@@ -47,6 +47,11 @@ export function Projects() {
     ['projects'],
   )
 
+  const drop = useApiMutation<string, { name: string; released: number; milestones: number }>(
+    (id) => api.del(`/api/projects/${id}`),
+    ['projects', 'tasks'],
+  )
+
   const list = useMemo(() => {
     const all = projects.data ?? []
     if (filter === 'all') return all
@@ -140,6 +145,32 @@ export function Projects() {
               toastError(err, 'Не удалось сохранить')
             }
           }}
+          onDelete={
+            can('workflow.manage')
+              ? async () => {
+                  /* Спрашиваем, называя последствия: задачи остаются,
+                     вехи уходят. Без этого «удалить» читается как
+                     «удалить вместе с задачами». */
+                  const parts = [
+                    editing.total > 0 ? `${editing.total} задач останутся без проекта` : '',
+                    'вехи и диаграмма будут удалены',
+                  ].filter(Boolean)
+                  const ask = `Удалить проект «${editing.name}»? ${parts.join(', ')}.`
+                  if (!window.confirm(ask)) return
+                  try {
+                    const r = await drop.mutateAsync(editing.id)
+                    toast(
+                      'Проект удалён',
+                      r.released > 0 ? `Задач осталось без проекта: ${r.released}` : r.name,
+                      'ok',
+                    )
+                    setEditing(null)
+                  } catch (err) {
+                    toastError(err, 'Не удалось удалить')
+                  }
+                }
+              : undefined
+          }
         />
       )}
     </div>
@@ -262,6 +293,7 @@ function ProjectDialog({
   busy,
   onClose,
   onSave,
+  onDelete,
 }: {
   /** Существующий проект — тогда форма правит его, а не создаёт новый. */
   project?: Project
@@ -270,6 +302,8 @@ function ProjectDialog({
   busy: boolean
   onClose: () => void
   onSave: (body: Record<string, unknown>) => void
+  /** Задан, если у смотрящего есть право удалять проекты. */
+  onDelete?: () => void
 }) {
   const teams = useTeams()
   const editing = Boolean(project)
@@ -435,6 +469,11 @@ function ProjectDialog({
         )}
 
         <div className="modal__foot">
+          {editing && onDelete && (
+            <button type="button" className="btn btn--danger btn--lg" onClick={onDelete}>
+              Удалить
+            </button>
+          )}
           <button type="button" className="btn btn--secondary btn--lg spacer" onClick={onClose}>
             Отмена
           </button>

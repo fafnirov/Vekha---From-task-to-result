@@ -300,6 +300,30 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true }
   })
 
+  /**
+   * Удаление спринта.
+   *
+   * Задачи не удаляются: связь с ними обнуляется, и они возвращаются в
+   * бэклог. Уходят только сам спринт и его дневные срезы сгорания —
+   * график без спринта смысла не имеет.
+   */
+  app.delete('/api/sprints/:id', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'sprint.manage'))) return
+
+    const { id } = req.params as { id: string }
+    const sprint = await prisma.sprint.findFirst({
+      where: { AND: [{ id }, { queue: queueScope(req.user!) }] },
+      select: { id: true, name: true, _count: { select: { tasks: true } } },
+    })
+    if (!sprint) return reply.code(404).send({ error: 'Спринт не найден' })
+
+    await prisma.task.updateMany({ where: { sprintId: id }, data: { sprintId: null } })
+    await prisma.sprint.delete({ where: { id } })
+
+    emitChanges(['sprints', 'tasks', 'board'])
+    return { ok: true, name: sprint.name, released: sprint._count.tasks }
+  })
+
   app.delete('/api/sprints/:id/tasks/:key', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'sprint.manage'))) return
 

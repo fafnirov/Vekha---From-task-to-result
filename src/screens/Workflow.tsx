@@ -1303,7 +1303,12 @@ function PeopleTab() {
     { password: string; email: string; name: string }
   >(({ id }) => api.post(`/api/people/${id}/password`, {}), ['people'])
 
-  const GRID = '30px minmax(0,1fr) 180px 130px 110px 36px'
+  const dropUser = useApiMutation<string, { name: string }>(
+    (id) => api.del(`/api/people/${id}`),
+    ['people', 'teams'],
+  )
+
+  const GRID = '30px minmax(0,1fr) 180px 130px 110px 36px 36px'
 
   return (
     <div className="stack">
@@ -1314,6 +1319,7 @@ function PeopleTab() {
           <span>Почта</span>
           <span>Роль</span>
           <span>Активен</span>
+          <span />
           <span />
         </div>
 
@@ -1366,6 +1372,36 @@ function PeopleTab() {
                   }
                 >
                   <Icon name="key" size={15} />
+                </button>
+              </Tooltip>
+            ) : (
+              <span />
+            )}
+
+            {/*
+              Удаление — для учётной записи, заведённой по ошибке. За тем,
+              кто успел поработать, числятся задачи и комментарии: сервер
+              такое удаление отклонит и объяснит, почему нужно «Отключить».
+            */}
+            {manage ? (
+              <Tooltip
+                label="Удалить учётную запись"
+                hint="Только для заведённой по ошибке — ушедшего сотрудника отключайте"
+                side="left"
+              >
+                <button
+                  type="button"
+                  className="btn btn--icon-quiet"
+                  aria-label={`Удалить учётную запись ${p.name}`}
+                  onClick={() => {
+                    if (!window.confirm(`Удалить учётную запись ${p.name} (${p.email})?`)) return
+                    void dropUser
+                      .mutateAsync(p.id)
+                      .then((r) => toast('Учётная запись удалена', r.name, 'ok'))
+                      .catch((err) => toastError(err, 'Удалить не вышло'))
+                  }}
+                >
+                  <Icon name="delete" size={15} />
                 </button>
               </Tooltip>
             ) : (

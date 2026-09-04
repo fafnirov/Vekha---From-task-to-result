@@ -262,6 +262,71 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return { password, email: target.email, name: target.name }
   })
 
+  /**
+   * Удаление учётной записи.
+   *
+   * Удаляется только та, за которой ничего не числится: заведённая по
+   * ошибке, с опечаткой в адресе, так и не использованная. Если человек
+   * успел поработать, удаление отказано — и это не придирка. Его задачи
+   * не могут остаться без автора, а комментарии ушли бы каскадом прямо
+   * из чужих обсуждений: в переписке появились бы дыры, и никто бы не
+   * понял, чего не хватает.
+   *
+   * Для ушедшего из команды есть «Отключить»: вход закрывается сразу,
+   * работа и переписка остаются на местах.
+   */
+  app.delete('/api/people/:id', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'people.manage'))) return
+
+    const { id } = req.params as { id: string }
+    const target = await prisma.user.findUnique({ where: { id } })
+    if (!target) return reply.code(404).send({ error: 'Участник не найден' })
+
+    if (target.id === req.user!.id) {
+      return reply.code(403).send({ error: 'Свою учётную запись удалить нельзя' })
+    }
+
+    if (target.role === 'admin') {
+      const admins = await prisma.user.count({ where: { role: 'admin', active: true } })
+      if (admins <= 1) {
+        return reply.code(409).send({ error: 'В организации должен остаться хотя бы один админ' })
+      }
+    }
+
+    const [tasks, authored, comments, worklogs, files, queues, projects] = await Promise.all([
+      prisma.task.count({ where: { assigneeId: id } }),
+      prisma.task.count({ where: { authorId: id } }),
+      prisma.comment.count({ where: { authorId: id } }),
+      prisma.worklog.count({ where: { userId: id } }),
+      prisma.attachment.count({ where: { uploadedById: id } }),
+      prisma.queue.count({ where: { ownerId: id } }),
+      prisma.project.count({ where: { leadId: id } }),
+    ])
+
+    const traces = [
+      authored > 0 ? `создано задач: ${authored}` : '',
+      tasks > 0 ? `в работе задач: ${tasks}` : '',
+      comments > 0 ? `комментариев: ${comments}` : '',
+      worklogs > 0 ? `записей о времени: ${worklogs}` : '',
+      files > 0 ? `вложений: ${files}` : '',
+      queues > 0 ? `очередей во владении: ${queues}` : '',
+      projects > 0 ? `проектов под руководством: ${projects}` : '',
+    ].filter(Boolean)
+
+    if (traces.length > 0) {
+      return reply.code(409).send({
+        error:
+          `За ${target.name} числится работа — ${traces.join(', ')}. ` +
+          `Удаление стёрло бы её из чужих задач и обсуждений. ` +
+          `Отключите учётную запись: вход закроется сразу, а работа останется.`,
+      })
+    }
+
+    await prisma.user.delete({ where: { id } })
+    emitChanges(['people', 'teams'])
+    return { ok: true, name: target.name }
+  })
+
   /* ── Очереди ──────────────────────────────────────────────────────── */
 
   app.get('/api/queues', async (req) => {
