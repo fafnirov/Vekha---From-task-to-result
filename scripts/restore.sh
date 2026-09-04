@@ -51,12 +51,18 @@ const p = new PrismaClient({ datasources: { db: { url: "file:/data/.restore-chec
   console.log(`в копии: пользователей ${await p.user.count()}, задач ${await p.task.count()}`)
   await p.$disconnect()
 })().catch((e) => { console.error(e.message); process.exit(1) })
-' || { rm -f "$DATA_DIR/.restore-check.db"; die "копия непригодна — рабочая база не тронута"; }
+' < /dev/null || { rm -f "$DATA_DIR/.restore-check.db"; die "копия непригодна — рабочая база не тронута"; }
 rm -f "$DATA_DIR/.restore-check.db"
 
-printf 'Заменить рабочую базу этой копией? Введите «да»: '
-read -r answer
-[ "$answer" = "да" ] || { say "отменено"; exit 0; }
+# Подтверждение можно передать заранее: RESTORE_YES=да scripts/restore.sh …
+# Нужно для проверок по расписанию, где спросить некого.
+if [ "${RESTORE_YES:-}" = "да" ]; then
+  say "подтверждение получено переменной RESTORE_YES"
+else
+  printf 'Заменить рабочую базу этой копией? Введите «да»: '
+  read -r answer
+  [ "$answer" = "да" ] || { say "отменено"; exit 0; }
+fi
 
 # ── Замена ──────────────────────────────────────────────────────────────
 say "останавливаю приложение"
