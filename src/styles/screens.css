@@ -118,14 +118,29 @@
 
 .detail-row {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
+  /*
+   * Подпись ужата с 88 до 74 пикселей: в узкой боковой панели значению
+   * не хватало места, и оно обрывалось на полуслове — «Дмитрий Со»,
+   * «Критически». Подписи полей короткие, им этой ширины довольно.
+   */
+  grid-template-columns: 74px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 27px;
   padding: 1px 6px;
   border-radius: 6px;
-  cursor: pointer;
+  /* Курсора-руки здесь не было места: строка не нажимается, нажимается
+     поле внутри неё. Рука обещала клик, которого нет. */
   transition: background 140ms ease;
+}
+
+/*
+ * Длинное значение в списке укорачивается многоточием, а не обрезается
+ * на середине буквы.
+ */
+.detail-row select,
+.detail-row .select {
+  text-overflow: ellipsis;
 }
 
 .detail-row:hover {
