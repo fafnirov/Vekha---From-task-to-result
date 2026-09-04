@@ -8,6 +8,7 @@ import { personDto, sprintDto, taskDto, taskInclude } from '../lib/dto.js'
 import { record } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
 import { startOfDay } from '../lib/format.js'
+import { queueScope, taskScope } from '../lib/access.js'
 
 const sprintInclude = {
   queue: { select: { key: true } },
@@ -22,10 +23,15 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/sprints', async (req) => {
     const p = z.object({ queue: z.string().optional(), state: z.string().optional() }).parse(req.query)
+    // Спринт принадлежит очереди: закрытая очередь не показывает ни
+    // своих задач, ни своих спринтов.
     const rows = await prisma.sprint.findMany({
       where: {
-        ...(p.queue ? { queue: { key: p.queue } } : {}),
-        ...(p.state ? { state: { in: p.state.split(',') } } : {}),
+        AND: [
+          { queue: queueScope(req.user!) },
+          ...(p.queue ? [{ queue: { key: p.queue } }] : []),
+          ...(p.state ? [{ state: { in: p.state.split(',') } }] : []),
+        ],
       },
       include: sprintInclude,
       orderBy: { startDate: 'desc' },
@@ -42,11 +48,22 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
 
     const sprint = p.sprint
       ? await prisma.sprint.findFirst({
-          where: { OR: [{ id: p.sprint }, { name: p.sprint }] },
+          where: {
+            AND: [
+              { OR: [{ id: p.sprint }, { name: p.sprint }] },
+              { queue: queueScope(req.user!) },
+            ],
+          },
           include: sprintInclude,
         })
       : await prisma.sprint.findFirst({
-          where: { state: 'active', ...(p.queue ? { queue: { key: p.queue } } : {}) },
+          where: {
+            AND: [
+              { state: 'active' },
+              { queue: queueScope(req.user!) },
+              ...(p.queue ? [{ queue: { key: p.queue } }] : []),
+            ],
+          },
           include: sprintInclude,
           orderBy: { startDate: 'desc' },
         })
@@ -55,18 +72,25 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
 
     const sprintTasks = sprint
       ? await prisma.task.findMany({
-          where: { sprintId: sprint.id },
+          where: { AND: [{ sprintId: sprint.id }, taskScope(req.user!)] },
           include: taskInclude,
           orderBy: [{ rank: 'asc' }, { num: 'desc' }],
         })
       : []
 
-    /* Бэклог — незакрытые задачи вне спринтов. */
+    /*
+     * Бэклог — незакрытые задачи вне спринтов, и только видимые. Раньше
+     * проверки не было: экран планирования выкладывал участнику весь
+     * бэклог организации, включая закрытые от него очереди.
+     */
     const backlogTasks = await prisma.task.findMany({
       where: {
-        sprintId: null,
-        status: { category: { not: 'done' } },
-        ...(p.queue ? { queue: { key: p.queue } } : {}),
+        AND: [
+          taskScope(req.user!),
+          { sprintId: null },
+          { status: { category: { not: 'done' } } },
+          ...(p.queue ? [{ queue: { key: p.queue } }] : []),
+        ],
       },
       include: taskInclude,
       orderBy: [{ priority: 'asc' }, { rank: 'asc' }, { num: 'desc' }],
@@ -116,7 +140,11 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
         unestimated,
       },
       sprints: (
-        await prisma.sprint.findMany({ include: sprintInclude, orderBy: { startDate: 'desc' } })
+        await prisma.sprint.findMany({
+          where: { queue: queueScope(req.user!) },
+          include: sprintInclude,
+          orderBy: { startDate: 'desc' },
+        })
       ).map(sprintDto),
     }
   })
@@ -140,13 +168,33 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
     const body = parsed.data
 
     const queue = await prisma.queue.findFirst({
-      where: { OR: [{ id: body.queue }, { key: body.queue.toUpperCase() }] },
+      where: {
+        AND: [
+          { OR: [{ id: body.queue }, { key: body.queue.toUpperCase() }] },
+          queueScope(req.user!),
+        ],
+      },
     })
     if (!queue) return reply.code(400).send({ error: 'Очередь не найдена' })
 
     const start = new Date(body.startDate)
     const end = new Date(body.endDate)
+    // Пустая строка даёт Invalid Date: сравнение с NaN всегда ложно, и
+    // мусор доезжал до базы, где запрос падал с 500 вместо объяснения.
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return reply.code(400).send({ error: 'Укажите даты начала и окончания' })
+    }
     if (end <= start) return reply.code(400).send({ error: 'Дата окончания раньше даты начала' })
+
+    // Имя спринта уникально внутри очереди: без этой проверки повтор
+    // возвращал 500 вместо понятного отказа.
+    const sameName = await prisma.sprint.findFirst({
+      where: { queueId: queue.id, name: body.name },
+      select: { id: true },
+    })
+    if (sameName) {
+      return reply.code(409).send({ error: `Спринт «${body.name}» в этой очереди уже есть` })
+    }
 
     // Активным может быть только один спринт очереди.
     if (body.state === 'active') {
@@ -318,7 +366,12 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/sprints/:id/burndown', async (req, reply) => {
     const { id } = req.params as { id: string }
     const sprint = await prisma.sprint.findFirst({
-      where: { OR: [{ id }, { name: decodeURIComponent(id) }] },
+      where: {
+        AND: [
+          { OR: [{ id }, { name: decodeURIComponent(id) }] },
+          { queue: queueScope(req.user!) },
+        ],
+      },
       include: { snapshots: { orderBy: { day: 'asc' } }, tasks: { include: { status: true } } },
     })
     if (!sprint) return reply.code(404).send({ error: 'Спринт не найден' })

@@ -43,16 +43,26 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
 
     const columns = await prisma.boardColumn.findMany({ orderBy: { order: 'asc' } })
     const allStatuses = await prisma.status.findMany({ select: { name: true, category: true } })
+    /*
+      * Условия сложены через AND. Разлив по объекту здесь молча отменял
+      * проверку доступа: у taskScope свой ключ OR, и соседний OR с
+      * условием «не закрыта или закрыта недавно» его затирал — доска
+      * показывала участнику задачи всех очередей организации.
+      */
     const tasks = await prisma.task.findMany({
       where: {
-        ...taskScope(req.user!),
-        ...(p.queue ? { queue: { key: { in: p.queue.split(',') } } } : {}),
-        ...(p.sprint ? { sprint: { name: p.sprint } } : {}),
-        ...(p.assignee ? { assignee: { code: { in: p.assignee.split(',') } } } : {}),
-        // Архив закрытых задач остаётся в таблице, а доска показывает работу.
-        OR: [
-          { status: { category: { not: 'done' } } },
-          { closedAt: { gte: doneSince } },
+        AND: [
+          taskScope(req.user!),
+          ...(p.queue ? [{ queue: { key: { in: p.queue.split(',') } } }] : []),
+          ...(p.sprint ? [{ sprint: { name: p.sprint } }] : []),
+          ...(p.assignee ? [{ assignee: { code: { in: p.assignee.split(',') } } }] : []),
+          // Архив закрытых задач остаётся в таблице, а доска показывает работу.
+          {
+            OR: [
+              { status: { category: { not: 'done' } } },
+              { closedAt: { gte: doneSince } },
+            ],
+          },
         ],
       },
       include: taskInclude,
@@ -212,13 +222,20 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
     // Те же условия и тот же порядок, что и в GET /api/board.
     const column_ = await prisma.task.findMany({
       where: {
-        status: { name: { in: columnStatuses } },
-        ...(parsed.data.queue ? { queue: { key: { in: parsed.data.queue.split(',') } } } : {}),
-        ...(parsed.data.sprint ? { sprint: { name: parsed.data.sprint } } : {}),
-        ...(parsed.data.assignee
-          ? { assignee: { code: { in: parsed.data.assignee.split(',') } } }
-          : {}),
-        OR: [{ status: { category: { not: 'done' } } }, { closedAt: { gte: moveSince } }],
+        AND: [
+          // Тот же отбор, что видел человек на доске: позиция считается
+          // по его списку, а не по скрытым от него карточкам.
+          taskScope(req.user!),
+          { status: { name: { in: columnStatuses } } },
+          ...(parsed.data.queue
+            ? [{ queue: { key: { in: parsed.data.queue.split(',') } } }]
+            : []),
+          ...(parsed.data.sprint ? [{ sprint: { name: parsed.data.sprint } }] : []),
+          ...(parsed.data.assignee
+            ? [{ assignee: { code: { in: parsed.data.assignee.split(',') } } }]
+            : []),
+          { OR: [{ status: { category: { not: 'done' } } }, { closedAt: { gte: moveSince } }] },
+        ],
       },
       orderBy: [{ rank: 'asc' }, { num: 'desc' }],
       select: { id: true, rank: true },

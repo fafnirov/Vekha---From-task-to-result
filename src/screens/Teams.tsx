@@ -49,7 +49,17 @@ export function Teams() {
         )}
       </div>
 
-      {!teams.isLoading && list.length === 0 && (
+      {/* Упавший запрос — это не «команд нет»: сообщаем о сбое, а не
+          выдумываем за пользователя состояние его данных. */}
+      {teams.isError && (
+        <Empty
+          icon="cloud_off"
+          title="Не удалось загрузить команды"
+          text="Проверьте связь и обновите страницу."
+        />
+      )}
+
+      {!teams.isLoading && !teams.isError && list.length === 0 && (
         <Empty
           icon="groups"
           title="Команд пока нет"

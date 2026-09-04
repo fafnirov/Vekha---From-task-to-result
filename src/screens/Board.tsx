@@ -316,8 +316,15 @@ export function Board() {
           />
         )}
 
+        {/*
+          Класс lane включает правила разбиения на дорожки: колонки
+          перестают тянуться на всю высоту и ограничиваются 46vh. Для
+          служебной дорожки «все» (группировка выключена) он не нужен —
+          иначе обычная доска без всякой группировки теряла половину
+          высоты колонки.
+        */}
         {lanes.map((lane) => (
-          <div key={lane.id} className="lane">
+          <div key={lane.id} className={lane.id === 'all' ? undefined : 'lane'}>
             {lane.id !== 'all' && (
               <div className="lane__head">
                 {lane.who ? <Avatar id={lane.who} size="md" /> : null}

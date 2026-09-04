@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js'
 import { authenticate, requireTaskView } from '../lib/auth.js'
 import { personDto } from '../lib/dto.js'
 import { daysBetween, overdueLabel, pct, plural, startOfDay } from '../lib/format.js'
-import { taskScope } from '../lib/access.js'
+import { queueScope, taskScope } from '../lib/access.js'
 
 /** Понедельник недели, в которую попадает дата. */
 function weekStart(d: Date): Date {
@@ -172,8 +172,15 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
     /* ── Метрики спринтов ───────────────────────────────────────────── */
 
+    // Спринты закрытых очередей в отчёт не попадают: их названия и
+    // цифры — такие же сведения, как и сами задачи.
     const sprints = await prisma.sprint.findMany({
-      where: p.queue ? { queue: { key: p.queue } } : {},
+      where: {
+        AND: [
+          { queue: queueScope(req.user!) },
+          ...(p.queue ? [{ queue: { key: p.queue } }] : []),
+        ],
+      },
       include: { tasks: { include: { status: { select: { category: true } } } } },
       orderBy: { startDate: 'asc' },
       take: 8,
@@ -218,9 +225,22 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     const p = z.object({ sprint: z.string().optional(), queue: z.string().optional() }).parse(req.query)
 
     const sprint = p.sprint
-      ? await prisma.sprint.findFirst({ where: { OR: [{ id: p.sprint }, { name: p.sprint }] } })
+      ? await prisma.sprint.findFirst({
+          where: {
+            AND: [
+              { OR: [{ id: p.sprint }, { name: p.sprint }] },
+              { queue: queueScope(req.user!) },
+            ],
+          },
+        })
       : await prisma.sprint.findFirst({
-          where: { state: 'active', ...(p.queue ? { queue: { key: p.queue } } : {}) },
+          where: {
+            AND: [
+              { state: 'active' },
+              { queue: queueScope(req.user!) },
+              ...(p.queue ? [{ queue: { key: p.queue } }] : []),
+            ],
+          },
           orderBy: { startDate: 'desc' },
         })
 
@@ -228,7 +248,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
     const [tasks, snapshots] = await Promise.all([
       prisma.task.findMany({
-        where: { sprintId: sprint.id },
+        where: { AND: [{ sprintId: sprint.id }, taskScope(req.user!)] },
         include: { status: { select: { category: true } } },
       }),
       prisma.burndownPoint.findMany({ where: { sprintId: sprint.id }, orderBy: { day: 'asc' } }),
@@ -273,7 +293,9 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     const today = startOfDay(new Date())
     const from = weekStart(new Date(today.getTime() - (p.weeks - 1) * 7 * 86_400_000))
 
+    // Даже голые даты — сведения: по ним читается объём чужой работы.
     const tasks = await prisma.task.findMany({
+      where: taskScope(req.user!),
       select: { createdAt: true, closedAt: true },
     })
 

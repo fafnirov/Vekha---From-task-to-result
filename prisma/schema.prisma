@@ -39,6 +39,11 @@ model User {
   active       Boolean   @default(true)
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime?
+  /// Момент, начиная с которого действительны выданные токены. Смена
+  /// пароля сдвигает его и тем закрывает все прежние сессии. Пусто —
+  /// отсечки нет: у тех, кто заведён до появления этого поля, старые
+  /// входы остаются действительными, и это не повод их выбрасывать.
+  sessionsFrom DateTime?
 
   ownedQueues    Queue[]        @relation("QueueOwner")
   ledProjects    Project[]      @relation("ProjectLead")

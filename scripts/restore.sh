@@ -71,9 +71,17 @@ esac
 say "останавливаю приложение"
 docker compose stop "$SERVICE"
 
+# Отложить нынешнюю базу можно только если она есть. Восстановление
+# затевают в том числе тогда, когда база пропала совсем, — и обрыв на
+# этом месте оставлял приложение остановленным, а копию неподставленной.
 ASIDE="$BACKUP_DIR/before-restore-$(date +%Y%m%d-%H%M%S).db"
-cp "$DATA_DIR/tracker.db" "$ASIDE"
-say "нынешняя база отложена: $(basename "$ASIDE")"
+if [ -f "$DATA_DIR/tracker.db" ]; then
+  cp "$DATA_DIR/tracker.db" "$ASIDE"
+  say "нынешняя база отложена: $(basename "$ASIDE")"
+else
+  ASIDE=""
+  say "рабочей базы нет — откладывать нечего"
+fi
 
 cp "$SRC" "$DATA_DIR/tracker.db"
 # Хвосты журнала от прежней базы к новой не относятся.
@@ -85,7 +93,11 @@ docker compose start "$SERVICE"
 for i in $(seq 1 20); do
   if curl -fsS --max-time 3 http://127.0.0.1:8093/api/auth/state >/dev/null 2>&1; then
     say "приложение отвечает (попытка $i)"
-    say "готово. если копия оказалась не та — вернуть: $0 $(basename "$ASIDE")"
+    if [ -n "$ASIDE" ]; then
+      say "готово. если копия оказалась не та — вернуть: $0 $(basename "$ASIDE")"
+    else
+      say "готово"
+    fi
     exit 0
   fi
   sleep 2

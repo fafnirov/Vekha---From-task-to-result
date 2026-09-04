@@ -20,6 +20,7 @@ import { reportRoutes } from './routes/reports.js'
 import { feedRoutes } from './routes/feed.js'
 import { startDailyJobs } from './jobs.js'
 import { bootstrap } from './bootstrap.js'
+import { tuneDatabase } from './lib/prisma.js'
 
 const PORT = Number(process.env.PORT ?? 4180)
 const HOST = process.env.HOST ?? '127.0.0.1'
@@ -38,6 +39,16 @@ export async function build() {
   const app = Fastify({
     logger: process.env.NODE_ENV === 'production' ? true : { level: 'warn' },
     bodyLimit: 2 * 1024 * 1024,
+    /*
+     * Настоящий адрес клиента берётся из X-Forwarded-For.
+     *
+     * Приложение слушает только петлю, снаружи стоит Caddy — без этого
+     * все запросы выглядели приходящими с 127.0.0.1, и ограничение
+     * попыток входа не могло отличить чужого перебирающего пароль от
+     * хозяина учётной записи. Доверять заголовку можно ровно потому, что
+     * порт наружу не открыт и подставить его может только прокси.
+     */
+    trustProxy: true,
   })
 
   await app.register(cookie)
@@ -114,6 +125,9 @@ export async function build() {
 }
 
 async function main() {
+  // Режим журнала и ожидание блокировки — до первых запросов.
+  await tuneDatabase()
+
   // До приёма запросов: без прав и воркфлоу приложение бесполезно.
   await bootstrap()
 

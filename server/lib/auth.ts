@@ -32,6 +32,19 @@ declare module '@fastify/jwt' {
   }
 }
 
+/**
+ * Отсечка сессий для записи в User.sessionsFrom.
+ *
+ * Округляется вниз до секунды, потому что в токене время выпуска (`iat`)
+ * хранится в секундах. Без округления токен, выданный в ту же секунду,
+ * оказывался «старше» отсечки на сотни миллисекунд и отвергал сам себя;
+ * а допуск в секунду, поставленный ради этого, заодно оставлял в живых
+ * чужие сессии, выпущенные секундой раньше.
+ */
+export function sessionCutoff(now = Date.now()): Date {
+  return new Date(Math.floor(now / 1000) * 1000)
+}
+
 /** Кладёт JWT в httpOnly-куку: токен недоступен из JavaScript страницы. */
 export function setAuthCookie(reply: FastifyReply, token: string): void {
   reply.setCookie(COOKIE_NAME, token, {
@@ -55,9 +68,9 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
   const token = req.cookies?.[COOKIE_NAME]
   if (!token) return void reply.code(401).send({ error: 'Требуется вход' })
 
-  let payload: { sub?: string }
+  let payload: { sub?: string; iat?: number }
   try {
-    payload = req.server.jwt.verify<{ sub: string }>(token)
+    payload = req.server.jwt.verify<{ sub: string; iat: number }>(token)
   } catch {
     clearAuthCookie(reply)
     return void reply.code(401).send({ error: 'Сессия истекла' })
@@ -70,6 +83,22 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
   if (!user || !user.active) {
     clearAuthCookie(reply)
     return void reply.code(401).send({ error: 'Учётная запись недоступна' })
+  }
+
+  /*
+   * Токен, выданный до последней смены пароля, недействителен. Иначе
+   * смена пароля ничего не отзывала: угнанный вход работал до тридцати
+   * суток, а сброс пароля — единственное, что предлагает интерфейс, —
+   * оставлял чужую сессию живой.
+   *
+   * Секунда допуска: `iat` хранится в секундах, и токен, выданный в тот
+   * же момент, что и запись отсечки, не должен отвергать сам себя.
+   */
+  if (user.sessionsFrom && payload.iat) {
+    if (payload.iat * 1000 < user.sessionsFrom.getTime()) {
+      clearAuthCookie(reply)
+      return void reply.code(401).send({ error: 'Пароль изменён — войдите заново' })
+    }
   }
 
   req.user = {

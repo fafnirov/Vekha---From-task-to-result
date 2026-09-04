@@ -188,6 +188,18 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
       fields: [
         { key: 'queue', label: 'Очередь', icon: 'inbox', values: queues.map((q) => q.key) },
         { key: 'status', label: 'Статус', icon: 'flag', values: statuses.map((s) => s.name) },
+        /*
+         * Категория статуса. Поле было в языке запросов, но не в этом
+         * списке, и конструктор не мог его показать: строка условия
+         * «категория != готово» рисовалась как «Очередь», а первая же
+         * правка соседнего поля переписывала запрос на другой.
+         */
+        {
+          key: 'category',
+          label: 'Категория',
+          icon: 'donut_small',
+          values: ['done', 'inprogress', 'todo', 'blocked'],
+        },
         {
           key: 'priority',
           label: 'Приоритет',
@@ -215,6 +227,10 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
         },
         { key: 'estimate', label: 'Оценка', icon: 'straighten', values: ['1', '2', '3', '5', '8', '13'] },
         { key: 'text', label: 'Текст', icon: 'search', values: [] },
+        // Ключи внутренние: подпись и значения переводит клиент теми же
+        // словарями, что и остальные поля.
+        { key: 'overdue', label: 'Просрочена', icon: 'schedule', values: ['true', 'false'] },
+        { key: 'watcher', label: 'Наблюдатель', icon: 'visibility', values: people.map((p) => p.code) },
       ],
       people: people.map((p) => ({ code: p.code, name: p.name })),
     }

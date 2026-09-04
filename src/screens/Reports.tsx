@@ -24,6 +24,27 @@ export function Reports() {
     )
   }
 
+  /*
+   * Сбой загрузки нельзя показывать нулями. Без этой ветки экран
+   * подставлял пустые значения и утверждал «Просрочек нет, все сроки
+   * соблюдаются» — то есть по неудавшемуся запросу выдавал заключение
+   * о делах команды.
+   */
+  if (reports.isError || !data) {
+    return (
+      <div className="page">
+        <div className="page__head">
+          <div className="page__title">Отчёты</div>
+        </div>
+        <Empty
+          icon="cloud_off"
+          title="Не удалось загрузить отчёты"
+          text="Проверьте связь и обновите страницу. Цифры ниже показывать нечем — лучше никаких, чем неверные."
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <div className="page__head">

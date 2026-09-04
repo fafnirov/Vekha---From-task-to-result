@@ -77,7 +77,7 @@ export function Queues() {
         {rows.map((q) => (
           <div
             key={q.id}
-            className="row"
+            className="row row--tall"
             style={{ gridTemplateColumns: GRID, gap: 10 }}
             onClick={() => nav(`/tasks?queue=${q.key}`)}
           >

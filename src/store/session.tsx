@@ -2,11 +2,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, UNAUTHORIZED_EVENT } from '../api/client'
 import {
   keys,
   useLiveUpdates,
@@ -65,7 +67,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     retry: (count, error) => !(error instanceof ApiError && error.status === 401) && count < 2,
   })
 
-  const authorized = Boolean(meQuery.data?.user)
+  /*
+   * Сессия кончилась — вышли сами или истёк срок. Признак хранится
+   * отдельно от кэша запросов: сброс кэша не гарантирует, что уже
+   * отрисованный экран сменится на форму входа, и человек оставался в
+   * интерфейсе, где всё пусто, а каждый запрос отвечает 401.
+   */
+  const [signedOut, setSignedOut] = useState(false)
+
+  useEffect(() => {
+    const onUnauthorized = () => setSignedOut(true)
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [])
+
+  const authorized = !signedOut && Boolean(meQuery.data?.user)
 
   useLiveUpdates(authorized)
 
@@ -79,7 +95,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return map
   }, [peopleQuery.data])
 
-  const me = meQuery.data?.user ?? null
+  const me = signedOut ? null : (meQuery.data?.user ?? null)
 
   const allowed = useMemo(() => {
     const matrix = permissionsQuery.data
@@ -113,6 +129,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await api.post('/api/auth/logout')
+    setSignedOut(true)
     qc.clear()
   }, [qc])
 
@@ -121,6 +138,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    * и без сброса интерфейс остался бы без прав и справочников.
    */
   const refresh = useCallback(() => {
+    setSignedOut(false)
     void qc.invalidateQueries()
   }, [qc])
 
@@ -130,13 +148,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       org: orgQuery.data ?? FALLBACK_ORG,
       people,
       list: peopleQuery.data ?? [],
-      ready: !meQuery.isLoading,
+      // Вышедшему ждать нечего: форма входа показывается сразу.
+      ready: signedOut || !meQuery.isLoading,
       can,
       sees,
       logout,
       refresh,
     }),
-    [me, orgQuery.data, people, peopleQuery.data, meQuery.isLoading, can, sees, logout, refresh],
+    [
+      me,
+      orgQuery.data,
+      people,
+      peopleQuery.data,
+      meQuery.isLoading,
+      signedOut,
+      can,
+      sees,
+      logout,
+      refresh,
+    ],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

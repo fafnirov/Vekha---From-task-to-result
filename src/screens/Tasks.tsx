@@ -488,7 +488,13 @@ export function Tasks() {
       </div>
 
       <div style={{ padding: '0 16px 26px' }}>
-        <div className="card" style={{ overflowX: 'auto', marginTop: 12 }}>
+        {/*
+          Горизонтальная прокрутка живёт на обёртке, а не на карточке с
+          таблицей: прокручиваемый предок отменяет position: sticky у
+          шапки, и заголовки колонок уезжали вверх вместе со строками.
+        */}
+        <div className="table-scroll" style={{ marginTop: 12 }}>
+        <div className="card">
           <div className="thead" style={{ gridTemplateColumns: gridCols, minWidth: gridMin }}>
             <Checkbox
               small
@@ -689,6 +695,7 @@ export function Tasks() {
               </button>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

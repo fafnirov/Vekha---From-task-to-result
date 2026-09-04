@@ -28,6 +28,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Событие «сессии больше нет». Слушает хранилище сессии, чтобы показать
+ * экран входа.
+ *
+ * Без него истёкшая или закрытая сессия выглядела так: интерфейс остаётся
+ * на месте, но каждый запрос отвечает 401, и человек видит пустые экраны
+ * с надписями «Всё под контролем» и «На вас сейчас нет открытых задач».
+ * Это не «нет задач», это «вы не вошли» — и сказать надо именно это.
+ */
+export const UNAUTHORIZED_EVENT = 'vekha:unauthorized'
+
 async function unwrap(res: Response): Promise<unknown> {
   if (res.status === 204) return null
 
@@ -42,6 +53,9 @@ async function unwrap(res: Response): Promise<unknown> {
   }
 
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    }
     const message =
       data && typeof data === 'object' && 'error' in data
         ? String((data as { error: unknown }).error)

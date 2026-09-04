@@ -9,6 +9,7 @@ import {
   clearAuthCookie,
   hashPassword,
   require as requirePerm,
+  sessionCutoff,
   setAuthCookie,
   verifyPassword,
 } from '../lib/auth.js'
@@ -141,7 +142,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     // Блокировка проверяется до обращения к базе: пока вход закрыт, пароль
     // не сверяется вовсе.
-    const locked = lockedFor(email)
+    // Ключ — машина плюс адрес почты: посторонний не должен закрывать
+    // вход коллеге, зная только его почту.
+    const source = req.ip
+    const locked = lockedFor(source, email)
     if (locked > 0) {
       const minutes = Math.ceil(locked / 60000)
       return reply.code(429).send({
@@ -154,7 +158,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // Одинаковый ответ на неизвестную почту и неверный пароль — чтобы по
     // ответу нельзя было перебирать существующие адреса.
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
-      const left = registerFailure(email)
+      const left = registerFailure(source, email)
       return reply.code(left > 0 ? 401 : 429).send({
         error:
           left > 0
@@ -167,7 +171,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Учётная запись отключена' })
     }
 
-    clearFailures(email)
+    clearFailures(source, email)
     setAuthCookie(reply, app.jwt.sign({ sub: user.id }, { expiresIn: '30d' }))
     return { user: personDto(user) }
   })
@@ -207,9 +211,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         (await verifyPassword(parsed.data.currentPassword, me.passwordHash))
       if (!ok) return reply.code(403).send({ error: 'Текущий пароль указан неверно' })
       data.passwordHash = await hashPassword(parsed.data.password)
+      // Прежние входы закрываются: смену пароля затевают ровно затем,
+      // чтобы отрезать того, кто им завладел.
+      data.sessionsFrom = sessionCutoff()
     }
 
     const user = await prisma.user.update({ where: { id: me.id }, data })
+    // Свой же токен выпускается заново, иначе человек выкинул бы себя.
+    if (parsed.data.password) {
+      setAuthCookie(reply, app.jwt.sign({ sub: user.id }, { expiresIn: '30d' }))
+    }
     emitChange({ scope: 'people' })
     return { user: personDto(user) }
   })

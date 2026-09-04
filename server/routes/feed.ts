@@ -52,11 +52,30 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
     if (!token) return reply.code(401).send({ error: 'Требуется вход' })
 
     let userId: string
+    let issuedAt = 0
     try {
-      const payload = app.jwt.verify<{ sub: string }>(token)
+      const payload = app.jwt.verify<{ sub: string; iat?: number }>(token)
       userId = payload.sub
+      issuedAt = payload.iat ?? 0
     } catch {
       return reply.code(401).send({ error: 'Сессия истекла' })
+    }
+
+    /*
+     * Канал живёт часами, поэтому пользователя перечитываем из базы, как
+     * это делает обычная проверка входа. Иначе отключённая учётная запись
+     * и смена пароля здесь не действовали: поток изменений продолжал
+     * приходить тому, у кого доступ уже отобрали.
+     */
+    const owner = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { active: true, sessionsFrom: true },
+    })
+    if (!owner || !owner.active) {
+      return reply.code(401).send({ error: 'Учётная запись недоступна' })
+    }
+    if (owner.sessionsFrom && issuedAt * 1000 + 1000 < owner.sessionsFrom.getTime()) {
+      return reply.code(401).send({ error: 'Пароль изменён — войдите заново' })
     }
 
     reply.raw.writeHead(200, {
@@ -163,8 +182,10 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
           orderBy: { createdAt: 'asc' },
           take: 6,
         }),
+        // Спринт — из очереди, открытой человеку. Иначе на главной
+        // висела бы сводка чужого спринта: название, баллы, сроки.
         prisma.sprint.findFirst({
-          where: { state: 'active' },
+          where: { AND: [{ state: 'active' }, { queue: queueScope(me) }] },
           include: {
             queue: { select: { key: true } },
             tasks: {
@@ -173,7 +194,10 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
           },
           orderBy: { startDate: 'desc' },
         }),
+        // Только по задачам, которые человеку видны: сводка не место
+        // для чужой работы.
         prisma.activity.findMany({
+          where: { task: taskScope(me) },
           include: activityInclude,
           orderBy: { createdAt: 'desc' },
           take: 12,
@@ -340,10 +364,19 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
         })
         .parse(req.query)
 
+      /*
+       * Лента отбирается по видимости самой задачи. Прежде проверки не
+       * было вовсе: любой вошедший читал всю историю организации —
+       * названия задач закрытых очередей, кто что сделал, — а с
+       * параметром ?task= получал историю любой задачи по ключу.
+       */
       const rows = await prisma.activity.findMany({
         where: {
-          ...(p.task ? { task: { key: p.task.toUpperCase() } } : {}),
-          ...(p.project ? { task: { project: { name: p.project } } } : {}),
+          AND: [
+            { task: taskScope(req.user!) },
+            ...(p.task ? [{ task: { key: p.task.toUpperCase() } }] : []),
+            ...(p.project ? [{ task: { project: { name: p.project } } }] : []),
+          ],
         },
         include: activityInclude,
         orderBy: { createdAt: 'desc' },

@@ -1,21 +1,30 @@
 /**
  * Ограничение попыток входа.
  *
- * Считаем по адресу почты, а не по IP: приложение стоит за обратным
- * прокси и без `trustProxy` все запросы приходят с одного адреса —
- * блокировка по IP выключила бы вход сразу всем.
+ * Считаем по паре «откуда пришёл запрос + чей адрес почты», а не по
+ * одной лишь почте. Прежний ключ — только почта — позволял постороннему
+ * закрыть коллеге вход на четверть часа тремя запросами с любым
+ * паролем; для рабочей команды это не размен, а готовый способ мешать
+ * работать.
  *
- * Обратная сторона выбранного ключа: чужой человек может намеренно
- * заблокировать известный ему адрес на четверть часа. Это осознанный
- * размен — перебор пароля вреднее, а владелец адреса просто ждёт.
+ * Настоящий адрес виден потому, что приложение стоит за обратным прокси,
+ * а Fastify запущен с `trustProxy`. Порт наружу не открыт, подставить
+ * заголовок может только сам прокси.
  *
- * Счётчик живёт в памяти процесса и обнуляется при перезапуске. Для
- * одного сервера этого достаточно; хранить его в базе значит писать
- * в неё на каждую неудачную попытку.
+ * Один ключ по почте всё же остаётся, но с запасом: он ловит перебор,
+ * растянутый по многим адресам, и не мешает обычному человеку, который
+ * ошибся пару раз с телефона и с ноутбука.
+ *
+ * Счётчики живут в памяти процесса и обнуляются при перезапуске. Для
+ * одного сервера этого достаточно; хранить их в базе значит писать в неё
+ * на каждую неудачную попытку.
  */
 
-/** Столько неудач подряд допускается до блокировки. */
+/** Столько неудач подряд с одной машины допускается до блокировки. */
 const LIMIT = 3
+
+/** Столько неудач по одному адресу почты отовсюду сразу. */
+const EMAIL_LIMIT = 15
 
 /** На сколько закрывается вход после исчерпания попыток. */
 const LOCK_MS = 15 * 60 * 1000
@@ -38,8 +47,15 @@ function prune(now: number): void {
   }
 }
 
-/** Сколько миллисекунд осталось до конца блокировки; 0 — вход открыт. */
-export function lockedFor(key: string, now = Date.now()): number {
+/** Ключи, по которым считаются неудачи для одной попытки входа. */
+function keysFor(source: string, email: string): { key: string; limit: number }[] {
+  return [
+    { key: `${source}|${email}`, limit: LIMIT },
+    { key: `почта|${email}`, limit: EMAIL_LIMIT },
+  ]
+}
+
+function lockedForKey(key: string, now: number): number {
   const entry = entries.get(key)
   if (!entry) return 0
   if (entry.lockedUntil > now) return entry.lockedUntil - now
@@ -55,26 +71,50 @@ export function lockedFor(key: string, now = Date.now()): number {
   return 0
 }
 
+/** Сколько миллисекунд осталось до конца блокировки; 0 — вход открыт. */
+export function lockedFor(source: string, email: string, now = Date.now()): number {
+  let longest = 0
+  for (const { key } of keysFor(source, email)) {
+    longest = Math.max(longest, lockedForKey(key, now))
+  }
+  return longest
+}
+
 /** Отмечает неудачную попытку и возвращает, сколько их осталось. */
-export function registerFailure(key: string, now = Date.now()): number {
+export function registerFailure(source: string, email: string, now = Date.now()): number {
   prune(now)
 
-  const entry = entries.get(key)
-  const fresh = !entry || now - entry.touchedAt > FORGET_MS
-  const fails = (fresh ? 0 : entry!.fails) + 1
+  let left = LIMIT
+  for (const { key, limit } of keysFor(source, email)) {
+    const entry = entries.get(key)
+    const fresh = !entry || now - entry.touchedAt > FORGET_MS
+    const fails = (fresh ? 0 : entry!.fails) + 1
 
-  entries.set(key, {
-    fails,
-    lockedUntil: fails >= LIMIT ? now + LOCK_MS : 0,
-    touchedAt: now,
-  })
+    entries.set(key, {
+      fails,
+      lockedUntil: fails >= limit ? now + LOCK_MS : 0,
+      touchedAt: now,
+    })
 
-  return Math.max(0, LIMIT - fails)
+    left = Math.min(left, Math.max(0, limit - fails))
+  }
+  return left
 }
 
 /** Успешный вход снимает накопленные неудачи. */
-export function clearFailures(key: string): void {
-  entries.delete(key)
+export function clearFailures(source: string, email: string): void {
+  for (const { key } of keysFor(source, email)) entries.delete(key)
+}
+
+/**
+ * Снимает блокировку по адресу почты отовсюду. Нужно при сбросе пароля:
+ * человека, который забыл пароль и исчерпал попытки, не должна держать
+ * блокировка после того, как ему выдали новый.
+ */
+export function clearEmail(email: string): void {
+  for (const key of entries.keys()) {
+    if (key.endsWith(`|${email}`)) entries.delete(key)
+  }
 }
 
 /** Только для тестов и обслуживания. */

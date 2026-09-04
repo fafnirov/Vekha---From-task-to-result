@@ -26,7 +26,7 @@ import {
 } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
 import { formatMinutes, shortDate } from '../lib/format.js'
-import { projectScope, taskScope, canSeeTask, visibleTask } from '../lib/access.js'
+import { projectScope, queueScope, taskScope, canSeeTask, visibleTask } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
 const SORTABLE: Record<string, (dir: 'asc' | 'desc') => Prisma.TaskOrderByWithRelationInput> = {
@@ -262,19 +262,51 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       include: { to: true },
     })
 
+    /*
+     * Подзадачи и связи проверяются отдельно.
+     *
+     * Проверка доступа к самой карточке ничего не говорит о том, что к
+     * ней подвешено: подзадача может лежать в другой очереди, а связать
+     * задачи между очередями может администратор, которому видно всё.
+     * Без этого отбора карточка из открытой очереди отдавала заголовок и
+     * описание задачи из закрытой.
+     *
+     * Отбираем по ключам одним запросом, а не проверкой на месте: в
+     * выборке подзадач нет полей очереди, по которым решает canSeeTask.
+     */
+    const relatedKeys = [
+      ...task.subtasks.map((s) => s.key),
+      ...task.linksOut.map((l) => l.to.key),
+      ...task.linksIn.map((l) => l.from.key),
+    ]
+    const visibleKeys = new Set(
+      relatedKeys.length === 0
+        ? []
+        : (
+            await prisma.task.findMany({
+              where: { AND: [{ key: { in: relatedKeys } }, taskScope(req.user!)] },
+              select: { key: true },
+            })
+          ).map((t) => t.key),
+    )
+
     return {
       task: taskDto(task, now),
-      subtasks: task.subtasks.map((s) => taskDto(s, now)),
+      subtasks: task.subtasks.filter((s) => visibleKeys.has(s.key)).map((s) => taskDto(s, now)),
       watchers: task.watchers.map((w) => ({ id: w.user.id, code: w.user.code, name: w.user.name })),
       links: [
-        ...task.linksOut.map((l) => ({
+        ...task.linksOut
+          .filter((l) => visibleKeys.has(l.to.key))
+          .map((l) => ({
           id: l.id,
           type: l.type,
           label: linkLabel(l.type, false),
           direction: 'out' as const,
           task: taskDto(l.to, now),
         })),
-        ...task.linksIn.map((l) => ({
+        ...task.linksIn
+          .filter((l) => visibleKeys.has(l.from.key))
+          .map((l) => ({
           id: l.id,
           type: l.type,
           label: linkLabel(l.type, true),
@@ -325,8 +357,19 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     }
     const body = parsed.data
 
+    /*
+     * Очередь — только из числа открытых человеку. Прежде проверки не
+     * было: участник заводил задачу в закрытой очереди, тратил её
+     * счётчик и попадал в списки чужой команды. При создании проекта
+     * такая проверка стояла, при создании задачи — забыли.
+     */
     const queue = await prisma.queue.findFirst({
-      where: { OR: [{ key: body.queue.toUpperCase() }, { id: body.queue }] },
+      where: {
+        AND: [
+          { OR: [{ key: body.queue.toUpperCase() }, { id: body.queue }] },
+          queueScope(req.user!),
+        ],
+      },
       include: { workflow: { include: { statuses: { orderBy: { order: 'asc' } } } } },
     })
     if (!queue) return reply.code(400).send({ error: 'Очередь не найдена' })
@@ -363,12 +406,17 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           select: { id: true },
         })
       : null
+    // Подвесить задачу можно только под ту, которую человек видит:
+    // иначе своей задачей из закрытой очереди он попадал в чужую карточку.
     const parent = body.parentKey
-      ? await prisma.task.findUnique({
-          where: { key: body.parentKey.toUpperCase() },
+      ? await prisma.task.findFirst({
+          where: visibleTask(req.user!, body.parentKey),
           select: { id: true },
         })
       : null
+    if (body.parentKey && !parent) {
+      return reply.code(400).send({ error: 'Родительская задача не найдена' })
+    }
 
     // Обязательные поля проверяются до выдачи номера: иначе счётчик
     // очереди израсходуется на попытку, которая не создаст задачу, и в
@@ -644,6 +692,18 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
+    /*
+     * Исполнитель один — либо человек, либо команда. Взаимное исключение
+     * ниже опиралось на прежнее значение из базы, поэтому запрос, где
+     * задано и то и другое, оставлял заполненными оба поля. Отвечаем
+     * отказом, а не выбираем за человека, кого он имел в виду.
+     */
+    if (body.assignee && body.team) {
+      return reply
+        .code(400)
+        .send({ error: 'Исполнитель — либо человек, либо команда, но не оба сразу' })
+    }
+
     if (body.assignee !== undefined) {
       const nextId = await resolveUser(body.assignee)
       if (nextId !== task.assigneeId) {
@@ -850,7 +910,22 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (!canSeeTask(req.user!, task)) {
       return reply.code(404).send({ error: 'Задача не найдена' })
     }
+    /*
+     * Файлы удаляем сами: каскад в базе убирает только записи Attachment,
+     * а сами файлы оставались в каталоге навсегда — место занято, а
+     * найти их уже нечем.
+     */
+    const files = await prisma.attachment.findMany({
+      where: { taskId: task.id },
+      select: { storedName: true },
+    })
     await prisma.task.delete({ where: { id: task.id } })
+    for (const f of files) {
+      const target = path.resolve(UPLOAD_DIR, f.storedName)
+      if (target.startsWith(path.resolve(UPLOAD_DIR) + path.sep)) {
+        await unlink(target).catch(() => undefined)
+      }
+    }
     emitChanges(['tasks', 'board', 'queues', 'projects'])
     return { ok: true }
   })
@@ -1381,6 +1456,19 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const { key } = req.params as { key: string }
     const task = await prisma.task.findFirst({ where: visibleTask(req.user!, key) })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
+
+    /*
+     * Потолок на число файлов у задачи. Размер одного ограничен на входе
+     * (25 МБ), но числу файлов предела не было, а каталог загрузок лежит
+     * на том же томе, что и база: заполнив диск, останавливаешь трекер
+     * целиком.
+     */
+    const already = await prisma.attachment.count({ where: { taskId: task.id } })
+    if (already >= 30) {
+      return reply
+        .code(409)
+        .send({ error: 'К задаче уже прикреплено 30 файлов — больше не поместится' })
+    }
 
     const file = await req.file()
     if (!file) return reply.code(400).send({ error: 'Файл не передан' })

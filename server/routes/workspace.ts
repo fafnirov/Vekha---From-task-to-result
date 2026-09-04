@@ -3,14 +3,20 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { authenticate, hashPassword, require as requirePerm, requireTaskView } from '../lib/auth.js'
+import {
+  authenticate,
+  hashPassword,
+  require as requirePerm,
+  requireTaskView,
+  sessionCutoff,
+} from '../lib/auth.js'
 import { randomBytes } from 'node:crypto'
-import { clearFailures } from '../lib/throttle.js'
+import { clearEmail } from '../lib/throttle.js'
 import { personDto, queueDto } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
 import { AVATAR_PALETTE, ROLES } from '../lib/constants.js'
 import { codeFrom, initialsFrom } from '../lib/format.js'
-import { queueScope } from '../lib/access.js'
+import { queueScope, taskScope } from '../lib/access.js'
 
 const queueInclude = {
   owner: { select: { code: true } },
@@ -71,8 +77,13 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const user = await prisma.user.findFirst({ where: { OR: [{ code }, { id: code }] } })
     if (!user) return reply.code(404).send({ error: 'Участник не найден' })
 
+    /*
+     * Счётчики — по задачам этого человека, видимым смотрящему. Прежде
+     * считались все подряд, и карточка выдавала, сколько у него работы
+     * в закрытых очередях.
+     */
     const tasks = await prisma.task.findMany({
-      where: { assigneeId: user.id },
+      where: { AND: [{ assigneeId: user.id }, taskScope(req.user!)] },
       include: { status: { select: { category: true } } },
     })
     const now = new Date()
@@ -109,6 +120,21 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
     const target = await prisma.user.findUnique({ where: { id } })
     if (!target) return reply.code(404).send({ error: 'Участник не найден' })
+
+    /*
+     * Свою роль не меняют через этот маршрут. Право «управление
+     * участниками» само по себе не должно превращаться в захват
+     * организации: без этой проверки его обладатель выписывал себе
+     * администратора одним запросом.
+     */
+    if (parsed.data.role && target.id === req.user!.id) {
+      return reply.code(403).send({ error: 'Свою роль изменить нельзя — попросите другого администратора' })
+    }
+    // Выдать роль выше собственной тоже нельзя: иначе то же повышение
+    // делается в два шага через помощника.
+    if (parsed.data.role && req.user!.role !== 'admin' && parsed.data.role === 'admin') {
+      return reply.code(403).send({ error: 'Назначить администратора может только администратор' })
+    }
 
     // Последнего администратора нельзя разжаловать или отключить —
     // иначе организация останется без доступа к настройкам.
@@ -223,12 +249,14 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const password = randomBytes(9).toString('base64url')
     await prisma.user.update({
       where: { id },
-      data: { passwordHash: await hashPassword(password) },
+      // Отсечка закрывает все прежние входы: сброс пароля нужен именно
+      // тогда, когда доступом мог завладеть кто-то ещё.
+      data: { passwordHash: await hashPassword(password), sessionsFrom: sessionCutoff() },
     })
 
     // Человека, который забыл пароль и исчерпал попытки, блокировка после
     // сброса держать не должна.
-    clearFailures(target.email)
+    clearEmail(target.email)
 
     emitChanges(['people'])
     return { password, email: target.email, name: target.name }
@@ -316,6 +344,32 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         : null,
     ])
 
+    /*
+     * Схему меняем только если новые статусы покрывают те, что уже стоят
+     * у задач. Статус принадлежит схеме (@@unique([workflowId, name])),
+     * и после подмены задача оставалась со статусом из чужой схемы: ни
+     * один переход к нему не подходил, и сменить его было нельзя.
+     */
+    if (workflow) {
+      const [inUse, target] = await Promise.all([
+        prisma.task.findMany({
+          where: { queueId: id },
+          select: { status: { select: { name: true } } },
+          distinct: ['statusId'],
+        }),
+        prisma.status.findMany({ where: { workflowId: workflow.id }, select: { name: true } }),
+      ])
+      const have = new Set(target.map((s) => s.name))
+      const lost = [...new Set(inUse.map((t) => t.status.name))].filter((n) => !have.has(n))
+      if (lost.length > 0) {
+        return reply.code(409).send({
+          error:
+            `В очереди есть задачи со статусами, которых нет в схеме «${workflow.name}»: ` +
+            `${lost.join(', ')}. Сначала переведите их в другой статус.`,
+        })
+      }
+    }
+
     const updated = await prisma.queue.update({
       where: { id },
       data: {
@@ -343,6 +397,31 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         .code(409)
         .send({ error: `В очереди ${count} задач — сначала перенесите или удалите их` })
     }
+
+    /*
+     * Проекты, спринты, правила и шаблоны привязаны к очереди каскадом и
+     * ушли бы вместе с ней молча — вместе с вехами проектов и историей
+     * сгорания спринтов. Предупреждение о задачах о них не говорило.
+     */
+    const [projects, sprints, rules, templates] = await Promise.all([
+      prisma.project.count({ where: { queueId: id } }),
+      prisma.sprint.count({ where: { queueId: id } }),
+      prisma.automationRule.count({ where: { queueId: id } }),
+      prisma.taskTemplate.count({ where: { queueId: id } }),
+    ])
+    const attached = [
+      projects > 0 ? `проектов: ${projects}` : '',
+      sprints > 0 ? `спринтов: ${sprints}` : '',
+      rules > 0 ? `правил: ${rules}` : '',
+      templates > 0 ? `шаблонов: ${templates}` : '',
+    ].filter(Boolean)
+    if (attached.length > 0) {
+      return reply.code(409).send({
+        error:
+          `К очереди привязаны ${attached.join(', ')} — они удалятся вместе с ней. ` +
+          `Сначала перенесите или удалите их.`,
+      })
+    }
     await prisma.queue.delete({ where: { id } }).catch(() => undefined)
     emitChanges(['queues'])
     return { ok: true }
@@ -350,7 +429,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
   /* ── Команды ──────────────────────────────────────────────────────── */
 
-  app.get('/api/teams', async () => {
+  app.get('/api/teams', async (req) => {
     const teams = await prisma.team.findMany({
       include: {
         members: { include: { user: true } },
@@ -358,9 +437,11 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       orderBy: { name: 'asc' },
     })
 
+    // Нагрузка считается по видимым задачам — по той же причине, что и
+    // счётчики в карточке человека.
     const openTasks = await prisma.task.groupBy({
       by: ['assigneeId'],
-      where: { status: { category: { not: 'done' } } },
+      where: { AND: [{ status: { category: { not: 'done' } } }, taskScope(req.user!)] },
       _count: { _all: true },
     })
     const load = new Map(openTasks.map((r) => [r.assigneeId, r._count._all]))

@@ -270,7 +270,12 @@ async function runAction(ruleName: string, taskId: string, action: Action): Prom
         select: { assigneeId: true },
       })
       if (current?.assigneeId === user.id) return false
-      await prisma.task.update({ where: { id: taskId }, data: { assigneeId: user.id } })
+      // Исполнитель один: назначая человека, снимаем команду — иначе
+      // задача оставалась поручённой и ему, и ей.
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { assigneeId: user.id, teamId: null },
+      })
       await record({
         taskId,
         actorId: null,
