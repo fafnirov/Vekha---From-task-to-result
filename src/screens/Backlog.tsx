@@ -345,7 +345,7 @@ export function Backlog() {
           {(summary?.unassigned ?? 0) > 0 && (
             <div className="plan__warn">
               <Icon name="person_off" size={15} color="var(--warn)" />
-              {summary?.unassigned} задач без исполнителя
+              {summary?.unassigned} {plural(summary?.unassigned ?? 0, 'задача', 'задачи', 'задач')} без исполнителя
             </div>
           )}
         </div>
