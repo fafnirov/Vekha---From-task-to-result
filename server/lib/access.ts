@@ -60,6 +60,29 @@ export function canSeeQueue(
   return allowed.includes(queue.access)
 }
 
+/**
+ * Видна ли человеку конкретная задача.
+ *
+ * Повторяет правило taskScope для одной уже загруженной записи: либо
+ * очередь ему открыта, либо задача его собственная. Проверка по одной
+ * очереди этого не учитывала, и назначенная задача, найденная в списке,
+ * отвечала «не найдена» при открытии.
+ */
+export function canSeeTask(
+  user: SessionUser,
+  task: {
+    queue: { access: string; ownerId: string }
+    assigneeId?: string | null
+    authorId?: string
+    watchers?: { userId: string }[]
+  },
+): boolean {
+  if (canSeeQueue(user, task.queue)) return true
+  if (task.assigneeId === user.id) return true
+  if (task.authorId === user.id) return true
+  return (task.watchers ?? []).some((w) => w.userId === user.id)
+}
+
 /** Условие видимости для выборок по очередям. */
 export function queueScope(user: SessionUser): Prisma.QueueWhereInput {
   if (user.role === 'admin') return {}

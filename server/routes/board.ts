@@ -9,7 +9,7 @@ import { record, notify, taskAudience } from '../lib/activity.js'
 import { emitChanges } from '../lib/events.js'
 import { runRules } from '../lib/automation.js'
 import { ROLE_LABEL, type Role } from '../lib/constants.js'
-import { canSeeQueue, taskScope } from '../lib/access.js'
+import { canSeeTask, taskScope } from '../lib/access.js'
 
 function parseStatuses(raw: string): string[] {
   try {
@@ -125,10 +125,11 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       include: {
         status: true,
         queue: { select: { workflowId: true, access: true, ownerId: true } },
+        watchers: { select: { userId: true } },
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
-    if (!canSeeQueue(req.user!, task.queue)) {
+    if (!canSeeTask(req.user!, task)) {
       return reply.code(404).send({ error: 'Задача не найдена' })
     }
 

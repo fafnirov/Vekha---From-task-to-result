@@ -26,7 +26,7 @@ import {
 } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
 import { formatMinutes, shortDate } from '../lib/format.js'
-import { taskScope, canSeeQueue, visibleTask } from '../lib/access.js'
+import { taskScope, canSeeTask, visibleTask } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
 const SORTABLE: Record<string, (dir: 'asc' | 'desc') => Prisma.TaskOrderByWithRelationInput> = {
@@ -243,7 +243,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
     // Ответ «не найдена», а не «нет доступа»: иначе по коду ответа можно
     // проверять существование задач в закрытой очереди.
-    if (!canSeeQueue(req.user!, task.queue)) {
+    if (!canSeeTask(req.user!, task)) {
       return reply.code(404).send({ error: 'Задача не найдена' })
     }
 
@@ -444,13 +444,14 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         type: true,
         resolution: true,
         queue: { include: { workflow: true } },
+        watchers: { select: { userId: true } },
         assignee: { select: { name: true } },
         project: { select: { name: true } },
         sprint: { select: { name: true } },
       },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
-    if (!canSeeQueue(req.user!, task.queue)) {
+    if (!canSeeTask(req.user!, task)) {
       return reply.code(404).send({ error: 'Задача не найдена' })
     }
 
@@ -751,10 +752,13 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const { key } = req.params as { key: string }
     const task = await prisma.task.findUnique({
       where: { key: key.toUpperCase() },
-      include: { queue: { select: { access: true, ownerId: true } } },
+      include: {
+        queue: { select: { access: true, ownerId: true } },
+        watchers: { select: { userId: true } },
+      },
     })
     if (!task) return reply.code(404).send({ error: 'Задача не найдена' })
-    if (!canSeeQueue(req.user!, task.queue)) {
+    if (!canSeeTask(req.user!, task)) {
       return reply.code(404).send({ error: 'Задача не найдена' })
     }
     await prisma.task.delete({ where: { id: task.id } })
