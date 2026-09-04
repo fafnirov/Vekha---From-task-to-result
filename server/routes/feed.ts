@@ -100,17 +100,26 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
         prisma.task.findMany({
           where: {
             /*
-             * Исполнителем может быть и команда, поэтому «мои задачи» —
-             * это и поручённое лично, и поручённое команде, в которой я
-             * состою. Иначе работа команды не попадала бы ни на чью
-             * главную и терялась.
+             * Условия сложены через AND, а не разлиты по объекту:
+             * у taskScope свой ключ OR, и при разливе он затирал бы
+             * соседний — «мои задачи» превращались в «все видимые».
              */
-            OR: [
-              { assigneeId: me.id },
-              { team: { members: { some: { userId: me.id } } } },
+            AND: [
+              /*
+               * Исполнителем может быть и команда, поэтому мои задачи —
+               * это поручённое лично и поручённое команде, в которой я
+               * состою. Иначе работа команды не попадала бы ни на чью
+               * главную и терялась.
+               */
+              {
+                OR: [
+                  { assigneeId: me.id },
+                  { team: { members: { some: { userId: me.id } } } },
+                ],
+              },
+              { status: { category: { not: 'done' } } },
+              taskScope(me),
             ],
-            status: { category: { not: 'done' } },
-            ...taskScope(me),
           },
           include: taskInclude,
           orderBy: [{ dueDate: 'asc' }, { priority: 'asc' }],
