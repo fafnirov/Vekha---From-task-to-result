@@ -1,0 +1,15 @@
+[Unit]
+Description=Резервная копия трекера
+# Копию снимает работающее приложение, поэтому ждём docker.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/srv/projects/tracker
+ExecStart=/srv/projects/tracker/scripts/backup.sh
+# Неудача должна быть видна: systemd пометит запуск сбойным, и это
+# останется в журнале, а не растворится.
+StandardOutput=journal
+StandardError=journal
