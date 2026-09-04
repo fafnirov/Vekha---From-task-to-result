@@ -17,4 +17,7 @@ pnpm-debug.log*
 .env
 prisma/dev.db
 prisma/dev.db-journal
+# Хвосты журнала WAL — такая же временная часть базы, как и она сама.
+prisma/dev.db-wal
+prisma/dev.db-shm
 uploads/
