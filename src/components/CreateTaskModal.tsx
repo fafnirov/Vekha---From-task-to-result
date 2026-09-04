@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Avatar, Checkbox, Icon } from './ui'
+import { Checkbox, Executor, Icon } from './ui'
 import { NoQueues } from './NoQueues'
 import { PRIORITY_KEY, PRIORITY_NAMES } from '../data/catalog'
 import {
@@ -108,7 +108,7 @@ export function CreateTaskModal() {
       .filter((f) => f.req)
       .filter((f) => {
         if (f.key === 'description') return !description.trim()
-        if (f.key === 'assignee') return !assignee
+        if (f.key === 'assignee') return !assignee && !team
         if (f.key === 'sprint') return !sprint
         if (f.key === 'estimate') return estimate === ''
         if (f.key === 'dueDate') return !dueDate
@@ -257,20 +257,40 @@ export function CreateTaskModal() {
             <label className="label">
               <span>Исполнитель{star('assignee')}</span>
               <div className="select-with-avatar">
-                <Avatar id={assignee || null} size="xs" title={false} />
+                <Executor who={assignee || null} team={team || null} size="xs" />
+                {/*
+                  Исполнитель бывает двух видов, но он один: список общий,
+                  разделён на группы. Выбор команды снимает человека и
+                  наоборот — иначе непонятно, с кого спрашивать.
+                */}
                 <select
                   className="select"
-                  value={assignee}
-                  onChange={(e) => setAssignee(e.target.value)}
+                  value={team ? `team:${team}` : assignee ? `user:${assignee}` : ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setAssignee(v.startsWith('user:') ? v.slice(5) : '')
+                    setTeam(v.startsWith('team:') ? v.slice(5) : '')
+                  }}
                 >
                   <option value="">Не назначен</option>
-                  {people
-                    .filter((p) => p.active)
-                    .map((p) => (
-                      <option key={p.id} value={p.code}>
-                        {p.name}
-                      </option>
-                    ))}
+                  <optgroup label="Люди">
+                    {people
+                      .filter((p) => p.active)
+                      .map((p) => (
+                        <option key={p.id} value={`user:${p.code}`}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                  {(teams.data ?? []).length > 0 && (
+                    <optgroup label="Команды">
+                      {(teams.data ?? []).map((t) => (
+                        <option key={t.id} value={`team:${t.name}`}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
             </label>
@@ -307,22 +327,6 @@ export function CreateTaskModal() {
                 {queueProjects.map((p) => (
                   <option key={p.id} value={p.name}>
                     {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              <span>Команда</span>
-              <select
-                className="select"
-                value={team}
-                onChange={(e) => setTeam(e.target.value)}
-                title="Поручённую команде задачу видит только она"
-              >
-                <option value="">Без команды</option>
-                {(teams.data ?? []).map((t) => (
-                  <option key={t.id} value={t.name}>
-                    {t.name}
                   </option>
                 ))}
               </select>

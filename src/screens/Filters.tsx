@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Avatar, Empty, Icon, StatusBadge, TaskKey } from '../components/ui'
+import { Empty, Executor, Icon, StatusBadge, TaskKey } from '../components/ui'
 import { dueColor } from '../data/catalog'
 import { api } from '../api/client'
 import { useApiMutation, useFilterFields, useFilters, useTasks } from '../api/hooks'
@@ -350,7 +350,7 @@ export function Filters() {
                   {t.title}
                 </span>
                 <StatusBadge status={t.status} category={t.statusCategory} />
-                <Avatar id={t.who} size="md" />
+                <Executor who={t.who} team={t.team} teamAbbr={t.teamAbbr} teamBg={t.teamBg} teamFg={t.teamFg} size="md" />
                 <span className="mono" style={{ fontSize: 12, color: dueColor(t.dueState) }}>
                   {t.due}
                 </span>

@@ -386,8 +386,14 @@ function compare(node: Extract<Node, { kind: 'cmp' }>, ctx: QueryContext): Where
     }
 
     case 'assignee':
-      if (isEmptyToken(first)) return wrap({ assigneeId: null })
-      return wrap({ assignee: { OR: [{ code: { in: values } }, { email: { in: values } }] } })
+      if (isEmptyToken(first)) return wrap({ assigneeId: null, teamId: null })
+      /* Исполнителем бывает и команда, поэтому имя ищется среди обоих. */
+      return wrap({
+        OR: [
+          { assignee: { OR: [{ code: { in: values } }, { email: { in: values } }] } },
+          { team: { name: { in: values } } },
+        ],
+      })
 
     case 'author':
       return wrap({ author: { OR: [{ code: { in: values } }, { email: { in: values } }] } })

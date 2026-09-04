@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Avatar, Empty, Icon, PriorityChip, Tag } from '../components/ui'
+import { Avatar, Empty, Executor, Icon, PriorityChip, Tag } from '../components/ui'
 import { points, priorityStyle, statusStyle } from '../data/catalog'
 import { useBoard, useMoveCard, useQueues, useSprints, useWorkflows } from '../api/hooks'
 import { ApiError } from '../api/client'
@@ -497,7 +497,7 @@ export function Board() {
                                     {t.comments}
                                   </span>
                                 )}
-                                <Avatar id={t.who} size="sm" />
+                                <Executor who={t.who} team={t.team} teamAbbr={t.teamAbbr} teamBg={t.teamBg} teamFg={t.teamFg} size="sm" />
                               </span>
                             </div>
                           </article>

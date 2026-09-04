@@ -70,6 +70,44 @@ export function Avatar({
   )
 }
 
+/**
+ * Исполнитель задачи: человек или команда.
+ *
+ * Исполнитель бывает двух видов, а место на карточке одно, поэтому
+ * выбор между аватаром и значком команды сделан здесь, а не повторён на
+ * каждом экране. Команда отличается формой — скруглённый квадрат против
+ * круга, — чтобы не приходилось вчитываться в буквы.
+ */
+export function Executor({
+  who,
+  team,
+  teamAbbr,
+  teamBg,
+  teamFg,
+  size = 'md',
+}: {
+  who: PersonId | null
+  team?: string | null
+  teamAbbr?: string | null
+  teamBg?: string | null
+  teamFg?: string | null
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'base'
+}) {
+  if (team) {
+    const cls = size === 'base' ? 'av av--team' : `av av--${size} av--team`
+    return (
+      <span
+        className={cls}
+        style={{ background: teamBg ?? 'var(--n-bg)', color: teamFg ?? 'var(--tx2)' }}
+        title={`Команда «${team}»`}
+      >
+        {teamAbbr ?? team.slice(0, 2).toUpperCase()}
+      </span>
+    )
+  }
+  return <Avatar id={who} size={size} />
+}
+
 export function AvatarStack({
   ids,
   size = 'md',

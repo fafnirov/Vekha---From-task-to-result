@@ -175,7 +175,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (p.type) filters.push({ type: { name: { in: p.type.split(',') } } })
     if (p.resolution) filters.push({ resolution: { name: { in: p.resolution.split(',') } } })
     if (p.mine) filters.push({ assigneeId: req.user!.id })
-    if (p.unassigned) filters.push({ assigneeId: null })
+    // Без исполнителя — значит ни человека, ни команды.
+    if (p.unassigned) filters.push({ assigneeId: null, teamId: null })
     if (p.watching) filters.push({ watchers: { some: { userId: req.user!.id } } })
     if (p.parent) filters.push({ parent: { key: p.parent } })
     if (p.overdue) {
@@ -361,7 +362,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const gaps = await missingRequired({
       title: body.title,
       description: body.description,
-      assignee: assigneeId,
+      // Команда — тоже исполнитель, поле заполнено и в этом случае.
+      assignee: team?.id ?? assigneeId,
       sprint: sprint?.id ?? null,
       estimate: body.estimate ?? null,
       dueDate: toDate(body.dueDate) ?? null,
@@ -393,7 +395,13 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         statusId: status.id,
         typeId: type?.id ?? null,
         priority: body.priority,
-        assigneeId,
+        /*
+         * Исполнитель — либо человек, либо команда, но не оба сразу:
+         * иначе непонятно, с кого спрашивать. Что указали последним, то
+         * и берём; переданное вместе — трактуем в пользу команды, раз
+         * её выбрали осознанно.
+         */
+        assigneeId: team ? null : assigneeId,
         authorId: req.user!.id,
         projectId: project?.id ?? null,
         teamId: team?.id ?? null,
@@ -637,6 +645,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           to: nextUser?.name ?? '—',
         })
         if (nextId) {
+          // Назначили человека — значит команда больше не исполнитель.
+          if (task.teamId) data.team = { disconnect: true }
           await watch(task.id, nextId)
           await notify({
             userIds: [nextId],
@@ -678,12 +688,37 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if ((team?.id ?? null) !== task.teamId) {
         data.team = team ? { connect: { id: team.id } } : { disconnect: true }
         events.push({
-          kind: 'project',
+          kind: 'assignee',
           field: 'team',
-          note: 'сменил(а) команду',
-          from: task.team?.name ?? '—',
+          note: 'сменил(а) исполнителя на команду',
+          from: task.team?.name ?? task.assignee?.name ?? '—',
           to: team?.name ?? '—',
         })
+        if (team) {
+          // Исполнитель один: команда сменяет человека, а не дополняет.
+          if (task.assigneeId) data.assignee = { disconnect: true }
+
+          /*
+           * Уведомляем всех, кому теперь принадлежит работа. Иначе
+           * поручение команде осталось бы незамеченным: у команды нет
+           * почтового ящика, а колокольчик есть у каждого её участника.
+           */
+          const members = await prisma.teamMember.findMany({
+            where: { teamId: team.id },
+            select: { userId: true },
+          })
+          const ids = members.map((m) => m.userId).filter((id) => id !== req.user!.id)
+          for (const id of ids) await watch(task.id, id)
+          if (ids.length) {
+            await notify({
+              userIds: ids,
+              actorId: req.user!.id,
+              taskId: task.id,
+              kind: 'assigned',
+              text: `${actor} поручил(а) задачу вашей команде «${team.name}»`,
+            })
+          }
+        }
       }
     }
 

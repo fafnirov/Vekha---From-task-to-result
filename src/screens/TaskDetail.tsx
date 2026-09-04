@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import {
-  Avatar,
-  Empty,
-  Icon,
-  PriorityChip,
-  Progress,
-  StatusBadge,
-  Tag,
-  TaskKey,
-  UnderlineTabs,
-} from '../components/ui'
+import { Avatar, Empty, Executor, Icon, PriorityChip, Progress, StatusBadge, Tag, TaskKey, UnderlineTabs } from '../components/ui'
 import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, fileSize } from '../data/catalog'
 import { Checklist } from '../components/Checklist'
 import { Tooltip } from '../components/Tooltip'
@@ -723,21 +713,52 @@ export function TaskDetail() {
 
           <Field label="Исполнитель">
             <div className="select-with-avatar">
-              <Avatar id={task.who} size="xs" title={false} />
+              <Executor
+                who={task.who}
+                team={task.team}
+                teamAbbr={task.teamAbbr}
+                teamBg={task.teamBg}
+                teamFg={task.teamFg}
+                size="xs"
+              />
+              {/*
+                Человек или команда — исполнитель один. Список общий,
+                разделён на группы; выбор одного снимает другого.
+              */}
               <select
                 className="select"
-                value={task.who ?? ''}
+                value={task.teamId ? `team:${task.team}` : task.who ? `user:${task.who}` : ''}
                 disabled={!editable}
-                onChange={(e) => void patch({ assignee: e.target.value || null }, 'Исполнитель изменён')}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v.startsWith('team:')) {
+                    void patch({ team: v.slice(5) }, 'Задача поручена команде')
+                  } else if (v.startsWith('user:')) {
+                    void patch({ assignee: v.slice(5) }, 'Исполнитель изменён')
+                  } else {
+                    void patch({ assignee: null, team: null }, 'Исполнитель снят')
+                  }
+                }}
               >
                 <option value="">Не назначен</option>
-                {people
-                  .filter((p) => p.active)
-                  .map((p) => (
-                    <option key={p.id} value={p.code}>
-                      {p.name}
-                    </option>
-                  ))}
+                <optgroup label="Люди">
+                  {people
+                    .filter((p) => p.active)
+                    .map((p) => (
+                      <option key={p.id} value={`user:${p.code}`}>
+                        {p.name}
+                      </option>
+                    ))}
+                </optgroup>
+                {(teams.data ?? []).length > 0 && (
+                  <optgroup label="Команды">
+                    {(teams.data ?? []).map((t) => (
+                      <option key={t.id} value={`team:${t.name}`}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           </Field>
@@ -839,23 +860,6 @@ export function TaskDetail() {
               {(projects.data ?? []).map((p) => (
                 <option key={p.id} value={p.name}>
                   {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Команда">
-            <select
-              className="select"
-              value={task.teamId ? (task.team ?? '') : ''}
-              disabled={!editable}
-              onChange={(e) => void patch({ team: e.target.value || null }, 'Команда изменена')}
-              title="Задача, поручённая команде, видна только её участникам"
-            >
-              <option value="">Без команды</option>
-              {(teams.data ?? []).map((t) => (
-                <option key={t.id} value={t.name}>
-                  {t.name}
                 </option>
               ))}
             </select>

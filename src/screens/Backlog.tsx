@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Avatar, Empty, Icon, PriorityChip, Progress, StatusBadge, TaskKey } from '../components/ui'
+import { Avatar, Empty, Executor, Icon, PriorityChip, Progress, StatusBadge, TaskKey } from '../components/ui'
 import { plural, points } from '../data/catalog'
 import { api } from '../api/client'
 import { useApiMutation, usePlanning, useQueues } from '../api/hooks'
@@ -443,7 +443,7 @@ function PlanRow({
       </span>
       <PriorityChip priority={task.priority} small />
       <StatusBadge status={task.status} category={task.statusCategory} small />
-      <Avatar id={task.who} size="md" />
+      <Executor who={task.who} team={task.team} teamAbbr={task.teamAbbr} teamBg={task.teamBg} teamFg={task.teamFg} size="md" />
       {/* Нейтральный цвет: раньше оценка красилась цветом просроченного
           срока, и «5 баллов» алым читалось как «с оценкой что-то не так»,
           хотя колонки со сроком в этой таблице нет вовсе. */}

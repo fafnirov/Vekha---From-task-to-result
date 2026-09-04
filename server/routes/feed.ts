@@ -98,7 +98,20 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
 
       const [myTasks, allOpen, projects, activeSprint, activity, mentions] = await Promise.all([
         prisma.task.findMany({
-          where: { assigneeId: me.id, status: { category: { not: 'done' } }, ...taskScope(me) },
+          where: {
+            /*
+             * Исполнителем может быть и команда, поэтому «мои задачи» —
+             * это и поручённое лично, и поручённое команде, в которой я
+             * состою. Иначе работа команды не попадала бы ни на чью
+             * главную и терялась.
+             */
+            OR: [
+              { assigneeId: me.id },
+              { team: { members: { some: { userId: me.id } } } },
+            ],
+            status: { category: { not: 'done' } },
+            ...taskScope(me),
+          },
           include: taskInclude,
           orderBy: [{ dueDate: 'asc' }, { priority: 'asc' }],
           take: 12,
@@ -121,7 +134,13 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
             AND: [
               { state: { in: ['active', 'risk', 'release'] } },
               projectScope(me),
-              { OR: [{ leadId: me.id }, { tasks: { some: { assigneeId: me.id } } }] },
+              {
+                OR: [
+                  { leadId: me.id },
+                  { tasks: { some: { assigneeId: me.id } } },
+                  { tasks: { some: { team: { members: { some: { userId: me.id } } } } } },
+                ],
+              },
             ],
           },
           include: {
@@ -196,7 +215,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
         }
       }
       for (const t of allOpen) {
-        if (!t.assigneeId) push(t.key, 'noassignee', shortDate(t.dueDate))
+        if (!t.assigneeId && !t.teamId) push(t.key, 'noassignee', shortDate(t.dueDate))
       }
       for (const t of allOpen) {
         if (t.dueDate && t.dueDate > today && t.dueDate <= soon) {

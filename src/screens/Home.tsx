@@ -1,15 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  Avatar,
-  Empty,
-  Icon,
-  PriorityChip,
-  Progress,
-  SectionTitle,
-  StatusBadge,
-  TaskKey,
-} from '../components/ui'
+import { Avatar, Empty, Executor, Icon, PriorityChip, Progress, SectionTitle, StatusBadge, TaskKey } from '../components/ui'
 import { dueColor } from '../data/catalog'
 import { useDashboard } from '../api/hooks'
 import { useSession } from '../store/session'
@@ -145,7 +136,7 @@ export function Home() {
                       {reason?.reason} · {row.meta}
                     </span>
                   </span>
-                  <Avatar id={task.who} size="md" />
+                  <Executor who={task.who} team={task.team} teamAbbr={task.teamAbbr} teamBg={task.teamBg} teamFg={task.teamFg} size="md" />
                   <span className="att__bar" style={{ background: reason?.bar }} />
                 </Link>
               )
