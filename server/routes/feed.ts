@@ -14,7 +14,7 @@ import {
 } from '../lib/dto.js'
 import { bus, type ChangeEvent } from '../lib/events.js'
 import { PROJECT_PALETTE } from '../lib/constants.js'
-import { projectScope, taskScope } from '../lib/access.js'
+import { projectScope, queueScope, taskScope } from '../lib/access.js'
 import { relativeTime, shortDate, startOfDay } from '../lib/format.js'
 
 const activityInclude = {
@@ -130,10 +130,10 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
           include: taskInclude,
         }),
         /*
-         * На главной — только свои проекты: те, где человек руководитель
-         * или исполняет хотя бы одну задачу. Полный список живёт на
-         * экране «Проекты»; сводка, показывающая заодно чужое, перестаёт
-         * быть сводкой.
+         * На главной — только свои проекты: те, где человек руководитель,
+         * состоит в команде проекта или ведёт хотя бы одну задачу. Полный
+         * список живёт на экране «Проекты»; сводка, показывающая заодно
+         * чужое, перестаёт быть сводкой.
          *
          * Условия сложены через AND, а не разлиты по объекту: у
          * projectScope свой ключ OR, и он затёрся бы соседним.
@@ -146,6 +146,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
               {
                 OR: [
                   { leadId: me.id },
+                  { teams: { some: { members: { some: { userId: me.id } } } } },
                   { tasks: { some: { assigneeId: me.id } } },
                   { tasks: { some: { team: { members: { some: { userId: me.id } } } } } },
                 ],
@@ -156,6 +157,7 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
             lead: { select: { code: true } },
             queue: { select: { key: true } },
             milestones: { orderBy: { date: 'asc' } },
+            teams: { select: { id: true, name: true, abbr: true, bg: true, fg: true } },
             tasks: { select: { id: true, status: { select: { category: true } } } },
           },
           orderBy: { createdAt: 'asc' },
@@ -362,25 +364,41 @@ export async function feedRoutes(app: FastifyInstance): Promise<void> {
 
       const [tasks, projects, queues, people] = await Promise.all([
         prisma.task.findMany({
+          /*
+           * Условия сложены через AND. Разлив по объекту здесь молча
+           * отменял проверку доступа: у taskScope свой ключ OR, и
+           * соседний OR с поисковыми условиями его затирал — поиск
+           * находил задачи закрытых очередей кому угодно.
+           */
           where: {
-            ...taskScope(req.user!),
-            OR: [
-              { key: { contains: term.toUpperCase() } },
-              { title: { contains: term } },
-              { description: { contains: term } },
+            AND: [
+              taskScope(req.user!),
+              {
+                OR: [
+                  { key: { contains: term.toUpperCase() } },
+                  { title: { contains: term } },
+                  { description: { contains: term } },
+                ],
+              },
             ],
           },
           include: taskInclude,
           orderBy: { updatedAt: 'desc' },
           take: 8,
         }),
+        // Найти можно только то, что и так видно: поиск не обходит доступ.
         prisma.project.findMany({
-          where: { name: { contains: term } },
+          where: { AND: [{ name: { contains: term } }, projectScope(req.user!)] },
           select: { id: true, name: true, abbr: true },
           take: 4,
         }),
         prisma.queue.findMany({
-          where: { OR: [{ key: { contains: term.toUpperCase() } }, { name: { contains: term } }] },
+          where: {
+            AND: [
+              { OR: [{ key: { contains: term.toUpperCase() } }, { name: { contains: term } }] },
+              queueScope(req.user!),
+            ],
+          },
           select: { id: true, key: true, name: true },
           take: 4,
         }),

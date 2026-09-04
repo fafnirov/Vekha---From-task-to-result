@@ -14,6 +14,7 @@ const projectInclude = {
   lead: { select: { code: true } },
   queue: { select: { key: true } },
   milestones: { orderBy: { date: 'asc' } },
+  teams: { select: { id: true, name: true, abbr: true, bg: true, fg: true } },
   tasks: { select: { id: true, status: { select: { category: true } } } },
 } as const
 
@@ -204,6 +205,9 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       startDate: z.string().nullable().optional(),
       dueDate: z.string().nullable().optional(),
       abbr: z.string().trim().max(3).optional(),
+      /* Команды, которым открыт проект. Пусто — видят только
+         администраторы и руководитель проекта. */
+      teams: z.array(z.string()).default([]),
     })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) {
@@ -235,6 +239,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
         state: body.state,
         startDate: body.startDate ? new Date(body.startDate) : null,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
+        teams: { connect: body.teams.map((id) => ({ id })) },
       },
       include: projectInclude,
     })
@@ -255,6 +260,8 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       lead: z.string().optional(),
       startDate: z.string().nullable().optional(),
       dueDate: z.string().nullable().optional(),
+      teams: z.array(z.string()).optional(),
+      abbr: z.string().trim().max(3).optional(),
     })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
@@ -283,6 +290,8 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
         ...(body.dueDate !== undefined
           ? { dueDate: body.dueDate ? new Date(body.dueDate) : null }
           : {}),
+        ...(body.abbr ? { abbr: body.abbr } : {}),
+        ...(body.teams ? { teams: { set: body.teams.map((id) => ({ id })) } } : {}),
       },
       include: projectInclude,
     })

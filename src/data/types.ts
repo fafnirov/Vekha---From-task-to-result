@@ -222,6 +222,9 @@ export interface Project {
   stFg: string
   milestone: string
   atRisk: boolean
+  /** Команды, которым открыт проект. Пусто — только админы и руководитель. */
+  teams: { id: string; name: string; abbr: string; bg: string; fg: string }[]
+  open: boolean
 }
 
 export interface Milestone {

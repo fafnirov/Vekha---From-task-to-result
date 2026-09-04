@@ -26,7 +26,7 @@ import {
 } from '../lib/constants.js'
 import { BASE_PATH, UPLOAD_DIR } from '../lib/paths.js'
 import { formatMinutes, shortDate } from '../lib/format.js'
-import { taskScope, canSeeTask, visibleTask } from '../lib/access.js'
+import { projectScope, taskScope, canSeeTask, visibleTask } from '../lib/access.js'
 
 /** Поля, по которым таблица задач умеет сортироваться. */
 const SORTABLE: Record<string, (dir: 'asc' | 'desc') => Prisma.TaskOrderByWithRelationInput> = {
@@ -337,12 +337,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (!status) return reply.code(400).send({ error: 'У схемы очереди нет статусов' })
 
     const assigneeId = (await resolveUser(body.assignee)) ?? null
+    /* Привязать задачу можно только к проекту, который человеку открыт:
+       иначе доступ обходился бы подстановкой чужого названия. */
     const project = body.project
       ? await prisma.project.findFirst({
-          where: { OR: [{ id: body.project }, { name: body.project }] },
+          where: {
+            AND: [{ OR: [{ id: body.project }, { name: body.project }] }, projectScope(req.user!)],
+          },
           select: { id: true },
         })
       : null
+    // Молча создать задачу без проекта значило бы потерять указание.
+    if (body.project && !project) {
+      return reply.code(400).send({ error: 'Проект не найден' })
+    }
     const sprint = body.sprint
       ? await prisma.sprint.findFirst({
           where: { OR: [{ id: body.sprint }, { name: body.sprint, queueId: queue.id }] },
@@ -668,10 +676,15 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     if (body.project !== undefined) {
       const project = body.project
         ? await prisma.project.findFirst({
-            where: { OR: [{ id: body.project }, { name: body.project }] },
+            where: {
+              AND: [{ OR: [{ id: body.project }, { name: body.project }] }, projectScope(req.user!)],
+            },
             select: { id: true, name: true },
           })
         : null
+      if (body.project && !project) {
+        return reply.code(400).send({ error: 'Проект не найден' })
+      }
       if ((project?.id ?? null) !== task.projectId) {
         data.project = project ? { connect: { id: project.id } } : { disconnect: true }
         events.push({

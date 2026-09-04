@@ -279,7 +279,7 @@ function QueueDialog({
           */}
           <div className="label">
             <span>Кому открыта очередь</span>
-            <div className="queue__teams">
+            <div className="access-teams">
               {(teams.data ?? []).length === 0 ? (
                 <span style={{ fontSize: 12, color: 'var(--tx3)' }}>
                   Команд пока нет — заведите их в разделе «Команды».

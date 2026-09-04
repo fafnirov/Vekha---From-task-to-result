@@ -817,6 +817,15 @@ export function TaskDetail() {
               onChange={(e) => void patch({ project: e.target.value || null }, 'Проект изменён')}
             >
               <option value="">Без проекта</option>
+              {/*
+                Задача может лежать в проекте, который смотрящему не
+                открыт: своя работа видна всегда, а проект — по доступу.
+                Без этой строки список не нашёл бы совпадения и поле
+                показало бы «Без проекта» — то есть соврало бы.
+              */}
+              {task.projectId && !(projects.data ?? []).some((p) => p.name === task.project) && (
+                <option value={task.project}>{task.project}</option>
+              )}
               {(projects.data ?? []).map((p) => (
                 <option key={p.id} value={p.name}>
                   {p.name}

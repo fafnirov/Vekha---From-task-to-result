@@ -532,8 +532,19 @@
   }
 }
 
-/* Отметки команд в настройках очереди: перенос по строкам, ровный шаг. */
-.queue__teams {
+/* Кому открыт проект — строка отметок на карточке. */
+.project__access {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--bd-soft, var(--bd));
+}
+
+/* Отметки команд в настройках очереди и проекта: перенос, ровный шаг. */
+.access-teams {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

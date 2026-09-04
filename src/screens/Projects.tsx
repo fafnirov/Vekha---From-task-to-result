@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, Progress, Segmented } from '../components/ui'
 import { NoQueues } from '../components/NoQueues'
 import { api } from '../api/client'
-import { useApiMutation, useProjects, useQueues, useTasks } from '../api/hooks'
+import { useApiMutation, useProjects, useQueues, useTasks, useTeams } from '../api/hooks'
 import { useSession } from '../store/session'
 import { useApp } from '../store/app'
 import type { Project } from '../data/types'
@@ -26,6 +26,8 @@ export function Projects() {
   const queues = useQueues()
   const [filter, setFilter] = useState<Filter>('active')
   const [creating, setCreating] = useState(false)
+  /** Проект, у которого открыты настройки. */
+  const [editing, setEditing] = useState<Project | null>(null)
 
   useEffect(() => {
     if (params.get('new') === '1' && can('sprint.manage')) {
@@ -37,6 +39,11 @@ export function Projects() {
 
   const save = useApiMutation<Record<string, unknown>, unknown>(
     (body) => api.post('/api/projects', body),
+    ['projects'],
+  )
+
+  const update = useApiMutation<{ id: string; body: Record<string, unknown> }, unknown>(
+    ({ id, body }) => api.patch(`/api/projects/${id}`, body),
     ['projects'],
   )
 
@@ -76,11 +83,11 @@ export function Projects() {
           icon="folder_open"
           title={can('sprint.manage') ? 'Проектов нет' : 'Вы не участвуете ни в одном проекте'}
           text={
-            /* Участнику показываются только его проекты, поэтому пустой
-               список у него значит не «проектов нет», а «вас пока никуда
-               не привлекли». Сказать иначе — соврать. */
+            /* Участнику показываются только открытые ему проекты, поэтому
+               пустой список у него значит не «проектов нет», а «доступ
+               ещё не выдан». Сказать иначе — соврать. */
             !can('sprint.manage')
-              ? 'Здесь появятся проекты, которыми вы руководите или в которых ведёте задачи.'
+              ? 'Здесь появятся проекты, которые открыли вашей команде или которыми вы руководите.'
               : (queues.data ?? []).length === 0
                 ? 'Сначала создайте очередь — проект собирает её задачи вокруг общей цели, вех и сроков.'
                 : 'Проект собирает задачи из очереди вокруг общей цели, вех и сроков.'
@@ -90,7 +97,12 @@ export function Projects() {
 
       <div className="cards-grid cards-grid--sm">
         {list.map((p) => (
-          <ProjectCard key={p.id} project={p} onOpen={() => nav(`/projects/${encodeURIComponent(p.name)}`)} />
+          <ProjectCard
+            key={p.id}
+            project={p}
+            onOpen={() => nav(`/projects/${encodeURIComponent(p.name)}`)}
+            onEdit={can('sprint.manage') ? () => setEditing(p) : undefined}
+          />
         ))}
       </div>
 
@@ -111,12 +123,40 @@ export function Projects() {
           }}
         />
       )}
+
+      {editing && (
+        <ProjectDialog
+          project={editing}
+          queues={(queues.data ?? []).map((q) => ({ key: q.key, name: q.name }))}
+          people={people.filter((x) => x.active).map((x) => ({ code: x.code, name: x.name }))}
+          busy={update.isPending}
+          onClose={() => setEditing(null)}
+          onSave={async (body) => {
+            try {
+              await update.mutateAsync({ id: editing.id, body })
+              toast('Проект сохранён', String(body.name), 'ok')
+              setEditing(null)
+            } catch (err) {
+              toastError(err, 'Не удалось сохранить')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
 
 /** Карточка проекта: прогресс и команда считаются по настоящим задачам. */
-function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void }) {
+function ProjectCard({
+  project,
+  onOpen,
+  onEdit,
+}: {
+  project: Project
+  onOpen: () => void
+  /** Задан, если у смотрящего есть право менять проект. */
+  onEdit?: () => void
+}) {
   const tasks = useTasks({ project: project.name, perPage: 100 })
 
   const team = useMemo(() => {
@@ -142,7 +182,45 @@ function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void
         <span className="badge badge--sm" style={{ background: project.stBg, color: project.stFg }}>
           {project.state}
         </span>
+        {onEdit && (
+          <button
+            type="button"
+            className="btn btn--icon-quiet"
+            title="Настройки проекта и доступ"
+            aria-label="Настройки проекта"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+          >
+            <Icon name="tune" size={16} />
+          </button>
+        )}
       </div>
+
+      {/*
+        Кому открыт проект — видно тому, кто этот доступ и выдаёт. Строка
+        отвечает на вопрос «почему этот проект здесь»: раньше доступ
+        выводился из задач и объяснить его было нечем.
+      */}
+      {onEdit && (
+        <div className="project__access">
+          {project.teams.length === 0 ? (
+            <span style={{ fontSize: 11, color: 'var(--tx3)' }}>доступ никому не выдан</span>
+          ) : (
+            project.teams.map((t) => (
+              <span
+                key={t.id}
+                className="badge badge--sm"
+                style={{ background: t.bg, color: t.fg }}
+                title={`Проект открыт команде «${t.name}»`}
+              >
+                {t.name}
+              </span>
+            ))
+          )}
+        </div>
+      )}
 
       <div className="project__meter">
         <span>
@@ -170,26 +248,40 @@ function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void
   )
 }
 
+/**
+ * Создание проекта и его настройки — одна форма.
+ *
+ * Разные формы для «завести» и «поправить» неминуемо разошлись бы: поле,
+ * добавленное в одну, забылось бы в другой. Отличие только в двух местах:
+ * очередь у существующего проекта не меняется, и кнопка называется иначе.
+ */
 function ProjectDialog({
+  project,
   queues,
   people,
   busy,
   onClose,
   onSave,
 }: {
+  /** Существующий проект — тогда форма правит его, а не создаёт новый. */
+  project?: Project
   queues: { key: string; name: string }[]
   people: { code: string; name: string }[]
   busy: boolean
   onClose: () => void
   onSave: (body: Record<string, unknown>) => void
 }) {
-  const [name, setName] = useState('')
-  const [queue, setQueue] = useState(queues[0]?.key ?? '')
-  const [lead, setLead] = useState(people[0]?.code ?? '')
-  const [description, setDescription] = useState('')
-  const [state, setState] = useState('active')
-  const [startDate, setStartDate] = useState('')
-  const [dueDate, setDueDate] = useState('')
+  const teams = useTeams()
+  const editing = Boolean(project)
+
+  const [name, setName] = useState(project?.name ?? '')
+  const [queue, setQueue] = useState(project?.queue ?? queues[0]?.key ?? '')
+  const [lead, setLead] = useState(project?.lead ?? people[0]?.code ?? '')
+  const [description, setDescription] = useState(project?.description ?? '')
+  const [state, setState] = useState(project?.stateKey ?? 'active')
+  const [startDate, setStartDate] = useState(project?.startDate?.slice(0, 10) ?? '')
+  const [dueDate, setDueDate] = useState(project?.dueDate?.slice(0, 10) ?? '')
+  const [teamIds, setTeamIds] = useState<string[]>(project?.teams.map((t) => t.id) ?? [])
 
   return (
     <div className="scrim" onClick={onClose}>
@@ -199,11 +291,13 @@ function ProjectDialog({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Новый проект"
+        aria-label={editing ? 'Настройки проекта' : 'Новый проект'}
       >
         <div className="modal__head">
           <Icon name="folder_open" size={18} color="var(--ac)" />
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Новый проект</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
+            {editing ? 'Настройки проекта' : 'Новый проект'}
+          </div>
           <button type="button" className="btn btn--icon-quiet spacer" onClick={onClose} aria-label="Закрыть">
             <Icon name="close" size={17} />
           </button>
@@ -238,7 +332,18 @@ function ProjectDialog({
           <div className="grid-3">
             <label className="label">
               <span>Очередь</span>
-              <select className="select" value={queue} onChange={(e) => setQueue(e.target.value)}>
+              {/*
+                У существующего проекта очередь не меняется: задачи
+                принадлежат очереди сами по себе, и переезд проекта их за
+                собой не унёс бы — вышел бы проект с задачами из чужой
+                очереди. Поле показано, чтобы было видно, где он живёт.
+              */}
+              <select
+                className="select"
+                value={queue}
+                disabled={editing}
+                onChange={(e) => setQueue(e.target.value)}
+              >
                 {queues.map((q) => (
                   <option key={q.key} value={q.key}>
                     {q.key} · {q.name}
@@ -288,6 +393,44 @@ function ProjectDialog({
               />
             </label>
           </div>
+
+          {/*
+            Доступ выдаётся командам поимённо — тем же порядком, что и у
+            очереди. Прежде проект был виден тому, кто вёл в нём хоть одну
+            задачу: человек с одной задачей получал карточку чужого
+            проекта целиком, а того, кого только собирались привлечь,
+            проект не пускал.
+          */}
+          <div className="label">
+            <span>Кому открыт проект</span>
+            <div className="access-teams">
+              {(teams.data ?? []).length === 0 ? (
+                <span style={{ fontSize: 12, color: 'var(--tx3)' }}>
+                  Команд пока нет — заведите их в разделе «Команды».
+                </span>
+              ) : (
+                (teams.data ?? []).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={teamIds.includes(t.id) ? 'tag tag--outline tag--on' : 'tag tag--outline'}
+                    onClick={() =>
+                      setTeamIds((prev) =>
+                        prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+                      )
+                    }
+                  >
+                    {t.name}
+                  </button>
+                ))
+              )}
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--tx3)' }}>
+              {teamIds.length === 0
+                ? 'Никому не открыт: проект увидят только администраторы и его руководитель.'
+                : 'Участники отмеченных команд видят проект, его вехи и сроки. Задачи внутри показываются те, что доступны им по очереди.'}
+            </span>
+          </div>
         </div>
         )}
 
@@ -303,16 +446,17 @@ function ProjectDialog({
             onClick={() =>
               onSave({
                 name,
-                queue,
+                ...(editing ? {} : { queue }),
                 lead,
                 description,
                 state,
                 startDate: startDate || null,
                 dueDate: dueDate || null,
+                teams: teamIds,
               })
             }
           >
-            Создать проект
+            {editing ? 'Сохранить' : 'Создать проект'}
           </button>
           )}
         </div>

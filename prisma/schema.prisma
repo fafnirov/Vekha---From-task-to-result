@@ -156,6 +156,8 @@ model Project {
   lead       User        @relation("ProjectLead", fields: [leadId], references: [id])
   tasks      Task[]
   milestones Milestone[]
+  /// Команды, которым открыт проект. Пусто — только админы и руководители.
+  teams      Team[]
 }
 
 model Milestone {
@@ -446,9 +448,10 @@ model Team {
   bg   String @default("var(--n-bg)")
   fg   String @default("var(--tx2)")
 
-  members TeamMember[]
-  tasks   Task[]
-  queues  Queue[]
+  members  TeamMember[]
+  tasks    Task[]
+  queues   Queue[]
+  projects Project[]
 }
 
 model TeamMember {

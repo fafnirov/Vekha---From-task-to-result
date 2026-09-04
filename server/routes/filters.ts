@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js'
 import { authenticate, requireTaskView } from '../lib/auth.js'
 import { emitChanges } from '../lib/events.js'
 import { parseQuery, QueryError, validateQuery } from '../lib/query.js'
-import { taskScope } from '../lib/access.js'
+import { projectScope, queueScope, taskScope } from '../lib/access.js'
 
 export async function filterRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate)
@@ -143,18 +143,37 @@ export async function filterRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  /** Значения для выпадающих списков конструктора условий. */
-  app.get('/api/filters/fields', async () => {
+  /*
+   * Значения для выпадающих списков конструктора условий.
+   *
+   * Списки отбираются по видимости: подсказка — тоже сведения. Раньше
+   * конструктор перечислял все очереди, проекты и спринты организации
+   * любому вошедшему, и закрытая работа читалась прямо из выпадающего
+   * списка, без единого запроса к задачам.
+   */
+  app.get('/api/filters/fields', async (req) => {
     const [queues, statuses, projects, teams, sprints, tags, types, resolutions, people] = await Promise.all([
-      prisma.queue.findMany({ select: { key: true, name: true }, orderBy: { key: 'asc' } }),
+      prisma.queue.findMany({
+        where: queueScope(req.user!),
+        select: { key: true, name: true },
+        orderBy: { key: 'asc' },
+      }),
       prisma.status.findMany({
         select: { name: true, category: true },
         distinct: ['name'],
         orderBy: { order: 'asc' },
       }),
-      prisma.project.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
+      prisma.project.findMany({
+        where: projectScope(req.user!),
+        select: { name: true },
+        orderBy: { name: 'asc' },
+      }),
       prisma.team.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
-      prisma.sprint.findMany({ select: { name: true }, orderBy: { startDate: 'desc' } }),
+      prisma.sprint.findMany({
+        where: { queue: queueScope(req.user!) },
+        select: { name: true },
+        orderBy: { startDate: 'desc' },
+      }),
       prisma.tag.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
       prisma.taskType.findMany({ select: { name: true }, orderBy: { order: 'asc' } }),
       prisma.resolution.findMany({ select: { name: true }, orderBy: { order: 'asc' } }),

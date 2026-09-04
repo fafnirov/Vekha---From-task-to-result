@@ -55,18 +55,20 @@ const PEOPLE = [
 
 const WORKFLOWS = ['Разработка', 'Интеграции', 'Аудит', 'Релизный']
 
+/* Поле teams — команды, которым открыты очередь и её задачи. */
 const QUEUES = [
-  { key: 'VEKHA', name: 'Платформа', owner: 'AK', wf: 'Разработка', access: 'team' },
-  { key: 'MOB', name: 'Мобильное приложение', owner: 'IV', wf: 'Разработка', access: 'team' },
-  { key: 'LMS', name: 'Интеграция с LMS', owner: 'PG', wf: 'Интеграции', access: 'restricted' },
-  { key: 'SEC', name: 'Безопасность', owner: 'EL', wf: 'Аудит', access: 'private' },
-  { key: 'INT', name: 'Внутренние инструменты', owner: 'DS', wf: 'Разработка', access: 'company' },
-  { key: 'REL', name: 'Релизы', owner: 'MN', wf: 'Релизный', access: 'team' },
+  { key: 'VEKHA', name: 'Платформа', owner: 'AK', wf: 'Разработка', teams: ['Продуктовая команда'] },
+  { key: 'MOB', name: 'Мобильное приложение', owner: 'IV', wf: 'Разработка', teams: ['Мобильная команда'] },
+  { key: 'LMS', name: 'Интеграция с LMS', owner: 'PG', wf: 'Интеграции', teams: ['Интеграции'] },
+  { key: 'SEC', name: 'Безопасность', owner: 'EL', wf: 'Аудит', teams: ['Качество и безопасность'] },
+  { key: 'INT', name: 'Внутренние инструменты', owner: 'DS', wf: 'Разработка', teams: ['Продуктовая команда', 'Интеграции'] },
+  { key: 'REL', name: 'Релизы', owner: 'MN', wf: 'Релизный', teams: ['Продуктовая команда', 'Качество и безопасность'] },
 ]
 
 const PROJECTS = [
   {
     name: 'Переработка интерфейса',
+    teams: ['Продуктовая команда'],
     abbr: 'PR',
     queue: 'VEKHA',
     lead: 'AK',
@@ -77,6 +79,7 @@ const PROJECTS = [
   },
   {
     name: 'Мобильное приложение 2.0',
+    teams: ['Мобильная команда'],
     abbr: 'MA',
     queue: 'MOB',
     lead: 'IV',
@@ -87,6 +90,7 @@ const PROJECTS = [
   },
   {
     name: 'Интеграция с учебной платформой',
+    teams: ['Интеграции'],
     abbr: 'CL',
     queue: 'LMS',
     lead: 'PG',
@@ -97,6 +101,7 @@ const PROJECTS = [
   },
   {
     name: 'Аудит безопасности',
+    teams: ['Качество и безопасность'],
     abbr: 'SA',
     queue: 'SEC',
     lead: 'EL',
@@ -107,6 +112,7 @@ const PROJECTS = [
   },
   {
     name: 'Внутренние инструменты',
+    teams: ['Продуктовая команда'],
     abbr: 'IT',
     queue: 'INT',
     lead: 'DS',
@@ -117,6 +123,7 @@ const PROJECTS = [
   },
   {
     name: 'Выпуск 2.4',
+    teams: ['Продуктовая команда', 'Качество и безопасность'],
     abbr: 'R4',
     queue: 'REL',
     lead: 'MN',
@@ -772,14 +779,34 @@ async function main() {
   }
 
   /* Команды */
+  const teamIds = new Map<string, string>()
   for (const t of TEAMS) {
     const palette = AVATAR_PALETTE[TEAMS.indexOf(t) % AVATAR_PALETTE.length]
     const team = await prisma.team.create({
       data: { name: t.name, abbr: t.abbr, note: t.note, bg: palette.bg, fg: palette.fg },
     })
+    teamIds.set(t.name, team.id)
     for (const code of t.members) {
       await prisma.teamMember.create({ data: { teamId: team.id, userId: userId(code)! } })
     }
+  }
+
+  /*
+   * Доступ: очереди и проекты открываются командам. Делается после
+   * создания самих команд — раньше их ещё нет, а без этой связки
+   * демонстрационные данные видел бы только администратор.
+   */
+  for (const q of QUEUES) {
+    await prisma.queue.update({
+      where: { id: queues.get(q.key)!.id },
+      data: { teams: { connect: q.teams.map((n) => ({ id: teamIds.get(n)! })) } },
+    })
+  }
+  for (const p of PROJECTS) {
+    await prisma.project.update({
+      where: { id: projects.get(p.name)! },
+      data: { teams: { connect: p.teams.map((n) => ({ id: teamIds.get(n)! })) } },
+    })
   }
 
   /* Автоматизации и шаблоны */

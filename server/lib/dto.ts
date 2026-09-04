@@ -225,6 +225,7 @@ export type ProjectRow = Prisma.ProjectGetPayload<{
     lead: { select: { code: true } }
     queue: { select: { key: true } }
     milestones: true
+    teams: { select: { id: true; name: true; abbr: true; bg: true; fg: true } }
     tasks: { select: { id: true; status: { select: { category: true } } } }
   }
 }>
@@ -262,6 +263,12 @@ export function projectDto(p: ProjectRow, index = 0, palette: { bg: string; fg: 
     stFg: style.fg,
     milestone: next?.title ?? DASH,
     atRisk: p.state === 'risk',
+    /*
+     * Команды, которым открыт проект. Пустой список означает, что его
+     * видят только администраторы и руководитель проекта.
+     */
+    teams: p.teams.map((t) => ({ id: t.id, name: t.name, abbr: t.abbr, bg: t.bg, fg: t.fg })),
+    open: p.teams.length > 0,
   }
 }
 
