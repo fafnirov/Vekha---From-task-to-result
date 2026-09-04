@@ -33,6 +33,18 @@ export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
       { queue: { access: { in: allowed } } },
       // Владелец видит свою очередь независимо от уровня доступа.
       { queue: { ownerId: user.id } },
+      /*
+       * Своя работа видна всегда, в какой бы очереди ни лежала.
+       *
+       * Без этого назначение молча ничего не делало: задачу поручали
+       * человеку в закрытой для него очереди, в списках она не
+       * появлялась, а по прямой ссылке отвечала «не найдена». Нельзя
+       * поручить работу и не дать её увидеть — это не ограничение
+       * доступа, а потерянная задача.
+       */
+      { assigneeId: user.id },
+      { authorId: user.id },
+      { watchers: { some: { userId: user.id } } },
     ],
   }
 }
@@ -64,8 +76,33 @@ export function queueScope(user: SessionUser): Prisma.QueueWhereInput {
  */
 export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
   if (user.role === 'admin') return {}
+
   const allowed = user.role === 'manager' ? MANAGER : OPEN
-  return { OR: [{ queue: { access: { in: allowed } } }, { queue: { ownerId: user.id } }] }
+  const inVisibleQueue: Prisma.ProjectWhereInput = {
+    OR: [{ queue: { access: { in: allowed } } }, { queue: { ownerId: user.id } }],
+  }
+
+  // Лид координирует работу, поэтому видит все проекты доступных очередей.
+  if (user.role === 'manager') return inVisibleQueue
+
+  /*
+   * Участник и гость видят только те проекты, к которым причастны:
+   * руководят ими или ведут в них задачу. Раньше видимость считалась
+   * по одному лишь доступу к очереди, и человеку показывали чужие
+   * проекты, к которым его никто не привлекал.
+   */
+  return {
+    AND: [
+      inVisibleQueue,
+      {
+        OR: [
+          { leadId: user.id },
+          { tasks: { some: { assigneeId: user.id } } },
+          { tasks: { some: { authorId: user.id } } },
+        ],
+      },
+    ],
+  }
 }
 
 /**
