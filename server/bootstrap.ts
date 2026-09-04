@@ -8,7 +8,13 @@
  */
 
 import { prisma } from './lib/prisma.js'
-import { DEFAULT_PERMISSIONS, PERMISSION_KEYS, ROLES } from './lib/constants.js'
+import {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_SECTIONS,
+  PERMISSION_KEYS,
+  ROLES,
+  SECTION_KEYS,
+} from './lib/constants.js'
 import {
   DEFAULT_BOARD_COLUMNS,
   DEFAULT_RESOLUTIONS,
@@ -38,6 +44,27 @@ async function ensurePermissions(): Promise<number> {
   }
 
   if (missing.length) await prisma.rolePermission.createMany({ data: missing })
+  return missing.length
+}
+
+/** Разделы меню по ролям: добавляем только отсутствующие пары. */
+async function ensureSections(): Promise<number> {
+  const existing = await prisma.roleSection.findMany({ select: { key: true, role: true } })
+  const have = new Set(existing.map((r) => `${r.key}|${r.role}`))
+
+  const missing = []
+  for (const section of SECTION_KEYS) {
+    for (const role of ROLES) {
+      if (have.has(`${section.key}|${role}`)) continue
+      missing.push({
+        key: section.key,
+        role,
+        allowed: DEFAULT_SECTIONS[section.key]?.includes(role) ?? false,
+      })
+    }
+  }
+
+  if (missing.length) await prisma.roleSection.createMany({ data: missing })
   return missing.length
 }
 
@@ -176,6 +203,9 @@ export async function bootstrap(): Promise<void> {
 
   const permissions = await ensurePermissions()
   if (permissions) added.push(`права (${permissions})`)
+
+  const sections = await ensureSections()
+  if (sections) added.push(`разделы меню (${sections})`)
 
   const fields = await ensureFields()
   if (fields) added.push(`поля задачи (${fields})`)

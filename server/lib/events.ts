@@ -18,6 +18,7 @@ export type Scope =
   | 'teams'
   | 'workflow'
   | 'people'
+  | 'sections'
 
 export interface ChangeEvent {
   scope: Scope

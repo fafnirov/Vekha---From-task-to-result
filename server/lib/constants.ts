@@ -100,6 +100,52 @@ export const PERMISSION_KEYS = [
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number]['key']
 
+/* ── Разделы приложения ───────────────────────────────────────────────── */
+
+/**
+ * Разделы бокового меню. Администратор решает, какие из них показывать
+ * какой роли.
+ *
+ * Это настройка вида, а не доступа: спрятанный раздел убирает пункт из
+ * меню и закрывает страницу, но данные по-прежнему защищают права и
+ * доступ команд к очередям. Показать гостю «Отчёты» не значит открыть
+ * ему чужие задачи — он увидит там только то, что ему и так доступно.
+ */
+export const SECTION_KEYS = [
+  { key: 'home', label: 'Главная', path: '/' },
+  { key: 'tasks', label: 'Задачи', path: '/tasks' },
+  { key: 'queues', label: 'Очереди', path: '/queues' },
+  { key: 'projects', label: 'Проекты', path: '/projects' },
+  { key: 'board', label: 'Доски', path: '/board' },
+  { key: 'sprints', label: 'Спринты', path: '/backlog' },
+  { key: 'filters', label: 'Фильтры', path: '/filters' },
+  { key: 'reports', label: 'Отчёты', path: '/reports' },
+  { key: 'teams', label: 'Команды', path: '/teams' },
+  { key: 'settings', label: 'Настройки', path: '/workflow' },
+] as const
+
+export type SectionKey = (typeof SECTION_KEYS)[number]['key']
+
+/**
+ * Что видит роль по умолчанию.
+ *
+ * Гостю оставлены только просмотровые разделы: он смотрит, а не ведёт
+ * работу. Участнику закрыты настройки — там раздаются права, и место
+ * это не его.
+ */
+export const DEFAULT_SECTIONS: Record<string, Role[]> = {
+  home: ['admin', 'manager', 'member', 'viewer'],
+  tasks: ['admin', 'manager', 'member', 'viewer'],
+  queues: ['admin', 'manager', 'member'],
+  projects: ['admin', 'manager', 'member'],
+  board: ['admin', 'manager', 'member', 'viewer'],
+  sprints: ['admin', 'manager', 'member'],
+  filters: ['admin', 'manager', 'member'],
+  reports: ['admin', 'manager'],
+  teams: ['admin', 'manager'],
+  settings: ['admin'],
+}
+
 /** Значения по умолчанию, которыми заполняется таблица RolePermission. */
 export const DEFAULT_PERMISSIONS: Record<string, Role[]> = {
   'task.view': ['admin', 'manager', 'member', 'viewer'],

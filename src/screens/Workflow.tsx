@@ -11,6 +11,7 @@ import {
   useFields,
   useInvites,
   usePermissions,
+  useSections,
   useQueues,
   useResolutions,
   useRules,
@@ -28,6 +29,7 @@ type TabId =
   | 'types'
   | 'fields'
   | 'permissions'
+  | 'sections'
   | 'rules'
   | 'templates'
   | 'people'
@@ -39,6 +41,7 @@ const TABS: { value: TabId; label: string }[] = [
   { value: 'types', label: 'Типы и резолюции' },
   { value: 'fields', label: 'Поля' },
   { value: 'permissions', label: 'Права' },
+  { value: 'sections', label: 'Разделы' },
   { value: 'rules', label: 'Автоматизации' },
   { value: 'templates', label: 'Шаблоны' },
   { value: 'board', label: 'Доска' },
@@ -82,6 +85,7 @@ export function Workflow() {
         {tab === 'types' && <TypesTab manage={manage} />}
         {tab === 'fields' && <FieldsTab manage={manage} />}
         {tab === 'permissions' && <PermissionsTab manage={manage} />}
+        {tab === 'sections' && <SectionsTab manage={manage} />}
         {tab === 'rules' && <RulesTab manage={manage} />}
         {tab === 'templates' && <TemplatesTab manage={manage} />}
         {tab === 'board' && <BoardTab manage={manage} />}
@@ -752,6 +756,65 @@ function FieldsTab({ manage }: { manage: boolean }) {
 }
 
 /* ── Права ────────────────────────────────────────────────────────────── */
+
+/**
+ * Какие разделы меню показывать какой роли.
+ *
+ * Настройка вида, а не доступа, и подпись под таблицей говорит об этом
+ * прямо: спрятать «Отчёты» от участника — не то же самое, что закрыть
+ * ему данные. Данные закрывают права и доступ команд к очередям.
+ */
+function SectionsTab({ manage }: { manage: boolean }) {
+  const sections = useSections()
+  const { toastError } = useApp()
+  const patch = useApiMutation<Record<string, unknown>, unknown>(
+    (body) => api.patch('/api/sections', body),
+    ['sections'],
+  )
+
+  const roles = sections.data?.roles ?? []
+  const grid = `minmax(0,1fr) repeat(${roles.length},92px)`
+
+  return (
+    <section className="card card--clip">
+      <div className="thead" style={{ gridTemplateColumns: grid, gap: 10, padding: '0 13px' }}>
+        <span>Раздел меню</span>
+        {roles.map((r) => (
+          <span key={r.key} style={{ textAlign: 'center' }}>
+            {r.label}
+          </span>
+        ))}
+      </div>
+
+      {(sections.data?.rows ?? []).map((row) => (
+        <div key={row.id} className="row row--static" style={{ gridTemplateColumns: grid, gap: 10 }}>
+          <span style={{ fontSize: 13 }}>{row.label}</span>
+          {row.cells.map((cell, i) => (
+            <span key={roles[i]?.key ?? i} style={{ justifySelf: 'center' }}>
+              <Checkbox
+                on={cell}
+                tone="ok"
+                label={`${row.label} — ${roles[i]?.label}`}
+                onClick={() =>
+                  manage &&
+                  void patch
+                    .mutateAsync({ key: row.id, role: roles[i].key, allowed: !cell })
+                    .catch(toastError)
+                }
+              />
+            </span>
+          ))}
+        </div>
+      ))}
+
+      <p className="report__hint" style={{ padding: '10px 13px' }}>
+        Снятая галочка убирает пункт из меню и закрывает страницу по прямой ссылке. Это про вид:
+        какие задачи и очереди человек увидит внутри доступных разделов, решают «Права» и состав
+        команд у очереди.
+      </p>
+    </section>
+  )
+}
 
 function PermissionsTab({ manage }: { manage: boolean }) {
   const permissions = usePermissions()

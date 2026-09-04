@@ -15,7 +15,7 @@ function isActive(item: NavItem, pathname: string): boolean {
 export function Sidebar() {
   const { navCollapsed, toggleNav, theme, toggleTheme, toast, toastError, mobileNav, closeMobileNav } =
     useApp()
-  const { me, org, logout, can } = useSession()
+  const { me, org, logout, can, sees } = useSession()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -34,6 +34,8 @@ export function Sidebar() {
   }
 
   const renderItem = (item: NavItem) => {
+    // Раздел, скрытый администратором для этой роли, в меню не нужен.
+    if (!sees(item.section)) return null
     if (item.needs && !can(item.needs)) return null
     const on = isActive(item, pathname)
     const count = item.count ? counts[item.count] : undefined

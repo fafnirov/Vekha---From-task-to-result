@@ -449,6 +449,12 @@ export interface PermissionMatrix {
   rows: { id: string; label: string; cells: boolean[] }[]
 }
 
+/** Какие разделы меню показывать какой роли. */
+export interface SectionMatrix {
+  roles: { key: AccessRole; label: string }[]
+  rows: { id: string; label: string; path: string; cells: boolean[] }[]
+}
+
 export interface AutomationRule {
   id: string
   name: string

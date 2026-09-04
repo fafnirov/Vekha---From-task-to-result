@@ -13,8 +13,10 @@ import {
 } from '@tanstack/react-query'
 import { api, apiUrl } from './client'
 import type {
+  AutomationRule,
   Board,
   Burndown,
+  ChecklistItem,
   Comment,
   Dashboard,
   FilterFieldCatalog,
@@ -30,8 +32,9 @@ import type {
   ProjectDetail,
   Queue,
   Reports,
-  AutomationRule,
+  Resolution,
   SearchResult,
+  SectionMatrix,
   Sprint,
   Task,
   TaskDetail,
@@ -39,8 +42,6 @@ import type {
   TaskPage,
   TaskTemplate,
   TaskType,
-  Resolution,
-  ChecklistItem,
   Team,
   Workflow,
 } from '../data/types'
@@ -65,6 +66,7 @@ export const keys = {
   workflows: ['workflows'] as const,
   fields: ['fields'] as const,
   permissions: ['permissions'] as const,
+  sections: ['sections'] as const,
   rules: ['rules'] as const,
   templates: ['templates'] as const,
   taskTypes: ['taskTypes'] as const,
@@ -103,6 +105,7 @@ const SCOPE_KEYS: Record<string, string[][]> = {
     ['resolutions'],
   ],
   people: [['people'], ['teams']],
+  sections: [['sections']],
 }
 
 /**
@@ -235,6 +238,17 @@ export const useWorkflows = () =>
 
 export const useFields = () =>
   useQuery({ queryKey: keys.fields, queryFn: () => api.get<TaskField[]>('/api/fields') })
+
+/**
+ * Какие разделы показывать какой роли. Нужен всем экранам, поэтому
+ * запрашивается всегда, а не только в настройках.
+ */
+export const useSections = () =>
+  useQuery({
+    queryKey: keys.sections,
+    queryFn: () => api.get<SectionMatrix>('/api/sections'),
+    staleTime: 5 * 60 * 1000,
+  })
 
 export const usePermissions = (enabled = true) =>
   useQuery({

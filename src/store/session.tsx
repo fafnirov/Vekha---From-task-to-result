@@ -7,7 +7,14 @@ import {
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api/client'
-import { keys, useLiveUpdates, useOrg, usePeople, usePermissions } from '../api/hooks'
+import {
+  keys,
+  useLiveUpdates,
+  useOrg,
+  usePeople,
+  usePermissions,
+  useSections,
+} from '../api/hooks'
 import type { Org, Person } from '../data/types'
 
 interface SessionApi {
@@ -19,6 +26,14 @@ interface SessionApi {
   ready: boolean
   /** Есть ли у текущей роли право. Сервер проверяет то же самое. */
   can: (permission: string) => boolean
+  /**
+   * Показывать ли роли раздел меню. Настраивается администратором.
+   *
+   * Это про вид, а не про доступ: спрятанный раздел убирает пункт из
+   * меню и закрывает страницу, но данные защищают права и доступ команд
+   * к очередям, а не это.
+   */
+  sees: (section: string) => boolean
   logout: () => Promise<void>
   refresh: () => void
 }
@@ -76,6 +91,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const can = useCallback((permission: string) => allowed.has(permission), [allowed])
 
+  const sectionsQuery = useSections()
+
+  const visibleSections = useMemo(() => {
+    const matrix = sectionsQuery.data
+    if (!matrix || !me) return null
+    const column = matrix.roles.findIndex((r) => r.key === me.accessRole)
+    if (column === -1) return null
+    return new Set(matrix.rows.filter((row) => row.cells[column]).map((row) => row.id))
+  }, [sectionsQuery.data, me])
+
+  /*
+   * Пока настройка не загружена, показываем всё: прятать разделы на
+   * долю секунды и возвращать обратно — хуже, чем показать лишнее
+   * человеку, которому они и так по правам доступны.
+   */
+  const sees = useCallback(
+    (section: string) => visibleSections === null || visibleSections.has(section),
+    [visibleSections],
+  )
+
   const logout = useCallback(async () => {
     await api.post('/api/auth/logout')
     qc.clear()
@@ -97,10 +132,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       list: peopleQuery.data ?? [],
       ready: !meQuery.isLoading,
       can,
+      sees,
       logout,
       refresh,
     }),
-    [me, orgQuery.data, people, peopleQuery.data, meQuery.isLoading, can, logout, refresh],
+    [me, orgQuery.data, people, peopleQuery.data, meQuery.isLoading, can, sees, logout, refresh],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -11,6 +11,7 @@ import {
   PERMISSION_KEYS,
   ROLES,
   ROLE_LABEL,
+  SECTION_KEYS,
   STATUS_CATEGORIES,
 } from '../lib/constants.js'
 import { relativeTime } from '../lib/format.js'
@@ -350,6 +351,69 @@ export async function workflowRoutes(app: FastifyInstance): Promise<void> {
   })
 
   /* ── Права ────────────────────────────────────────────────────────── */
+
+  /* ── Разделы меню по ролям ────────────────────────────────────────── */
+
+  /**
+   * Какие разделы показывать какой роли.
+   *
+   * Отдаётся всем вошедшим, а не только настройщикам: меню и маршруты
+   * строятся по этому списку у каждого.
+   */
+  app.get('/api/sections', async () => {
+    const rows = await prisma.roleSection.findMany()
+    const byKey = new Map<string, Map<string, boolean>>()
+    for (const r of rows) {
+      if (!byKey.has(r.key)) byKey.set(r.key, new Map())
+      byKey.get(r.key)!.set(r.role, r.allowed)
+    }
+
+    return {
+      roles: ROLES.map((r) => ({ key: r, label: ROLE_LABEL[r] })),
+      rows: SECTION_KEYS.map((sec) => ({
+        id: sec.key,
+        label: sec.label,
+        path: sec.path,
+        cells: ROLES.map((role) => byKey.get(sec.key)?.get(role) ?? false),
+      })),
+    }
+  })
+
+  app.patch('/api/sections', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'workflow.manage'))) return
+
+    const schema = z.object({
+      key: z.string(),
+      role: z.enum(ROLES),
+      allowed: z.boolean(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
+    const { key, role, allowed } = parsed.data
+
+    if (!SECTION_KEYS.some((sec) => sec.key === key)) {
+      return reply.code(400).send({ error: 'Неизвестный раздел' })
+    }
+
+    /*
+     * Настройки у администратора не отнимаются: сняв их, он потеряет
+     * единственный путь вернуть их обратно.
+     */
+    if (role === 'admin' && key === 'settings' && !allowed) {
+      return reply.code(409).send({
+        error: 'Настройки нельзя скрыть от администратора — иначе вернуть их будет неоткуда',
+      })
+    }
+
+    await prisma.roleSection.upsert({
+      where: { key_role: { key, role } },
+      update: { allowed },
+      create: { key, role, allowed },
+    })
+
+    emitChanges(['sections'])
+    return { ok: true }
+  })
 
   app.get('/api/permissions', async () => {
     const rows = await prisma.rolePermission.findMany()

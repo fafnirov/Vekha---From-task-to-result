@@ -11,22 +11,24 @@ export interface NavItem {
    * странице встретит отказом, в меню только сбивает с толку.
    */
   needs?: string
+  /** Код раздела: администратор решает, каким ролям его показывать. */
+  section: string
 }
 
 export const NAV_MAIN: NavItem[] = [
-  { to: '/', label: 'Главная', icon: 'home' },
-  { to: '/tasks', label: 'Задачи', icon: 'checklist', count: 'tasks', needs: 'task.view' },
-  { to: '/queues', label: 'Очереди', icon: 'layers', count: 'queues' },
-  { to: '/projects', label: 'Проекты', icon: 'folder_open', count: 'projects' },
-  { to: '/board', label: 'Доски', icon: 'view_kanban', needs: 'task.view' },
-  { to: '/backlog', label: 'Спринты', icon: 'rotate_right', needs: 'task.view' },
+  { to: '/', label: 'Главная', icon: 'home' , section: 'home' },
+  { to: '/tasks', label: 'Задачи', icon: 'checklist', count: 'tasks', needs: 'task.view' , section: 'tasks' },
+  { to: '/queues', label: 'Очереди', icon: 'layers', count: 'queues' , section: 'queues' },
+  { to: '/projects', label: 'Проекты', icon: 'folder_open', count: 'projects' , section: 'projects' },
+  { to: '/board', label: 'Доски', icon: 'view_kanban', needs: 'task.view' , section: 'board' },
+  { to: '/backlog', label: 'Спринты', icon: 'rotate_right', needs: 'task.view' , section: 'sprints' },
 ]
 
 export const NAV_ADMIN: NavItem[] = [
-  { to: '/filters', label: 'Фильтры', icon: 'filter_alt', needs: 'task.view' },
-  { to: '/reports', label: 'Отчёты', icon: 'monitoring', needs: 'task.view' },
-  { to: '/teams', label: 'Команды', icon: 'groups' },
-  { to: '/workflow', label: 'Настройки', icon: 'settings' },
+  { to: '/filters', label: 'Фильтры', icon: 'filter_alt', needs: 'task.view' , section: 'filters' },
+  { to: '/reports', label: 'Отчёты', icon: 'monitoring', needs: 'task.view' , section: 'reports' },
+  { to: '/teams', label: 'Команды', icon: 'groups' , section: 'teams' },
+  { to: '/workflow', label: 'Настройки', icon: 'settings' , section: 'settings' },
 ]
 
 /** Хлебные крошки по маршруту, показываются после названия организации. */

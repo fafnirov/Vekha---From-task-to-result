@@ -487,6 +487,17 @@ model RolePermission {
   @@unique([key, role])
 }
 
+/// Какие разделы приложения показывать роли. Настраивается админом.
+model RoleSection {
+  id      String  @id @default(cuid())
+  /// Код раздела: home, tasks, queues, projects, board, sprints, …
+  key     String
+  role    String
+  allowed Boolean @default(true)
+
+  @@unique([key, role])
+}
+
 model AutomationRule {
   id        String    @id @default(cuid())
   queueId   String?
