@@ -525,6 +525,8 @@ export interface Org {
   unit: string
   mark: string
   version: string
+  /** Регистрация закрыта: приглашения не работают, учётки заводит админ. */
+  registrationClosed?: boolean
 }
 
 export interface SearchResult {

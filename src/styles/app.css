@@ -83,7 +83,9 @@
   color: var(--tx2);
 }
 
-.auth__error {
+/* Одна плашка ошибки на все формы: на входе и в настройках. */
+.auth__error,
+.form__error {
   display: flex;
   align-items: center;
   gap: 7px;

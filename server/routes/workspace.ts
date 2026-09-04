@@ -9,7 +9,7 @@ import { clearFailures } from '../lib/throttle.js'
 import { personDto, queueDto } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
 import { AVATAR_PALETTE, QUEUE_ACCESS, ROLES } from '../lib/constants.js'
-import { initialsFrom } from '../lib/format.js'
+import { codeFrom, initialsFrom } from '../lib/format.js'
 import { queueScope } from '../lib/access.js'
 
 const queueInclude = {
@@ -30,6 +30,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       unit: org?.unit ?? '',
       mark: org?.mark ?? 'В',
       version: process.env.npm_package_version ?? '3.0',
+      /* Закрытая регистрация означает, что приглашения не работают и
+         учётные записи заводит администратор вручную. */
+      registrationClosed: (process.env.REGISTRATION ?? 'invite').toLowerCase() === 'closed',
     }
   })
 
@@ -135,6 +138,66 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
     emitChanges(['people'])
     return personDto(user)
+  })
+
+  /**
+   * Заведение учётной записи администратором.
+   *
+   * Почты в системе нет, а при закрытой регистрации не работают и
+   * приглашения — значит единственный способ дать человеку доступ
+   * должен быть в самом интерфейсе, а не командой на сервере.
+   *
+   * Пароль задаёт администратор и передаёт лично. Человек меняет его в
+   * «Профиль и пароль»; напоминание об этом стоит в ответе.
+   */
+  app.post('/api/people', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'people.manage'))) return
+
+    const schema = z.object({
+      email: z.string().trim().toLowerCase().email('Некорректный адрес почты'),
+      name: z.string().trim().min(2, 'Укажите имя — его видит вся команда'),
+      password: z.string().min(8, 'Пароль короче восьми символов'),
+      role: z.enum(ROLES).default('member'),
+      jobTitle: z.string().trim().max(60).optional(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0].message })
+    }
+    const body = parsed.data
+
+    const taken = await prisma.user.findUnique({ where: { email: body.email } })
+    if (taken) {
+      return reply.code(409).send({ error: `Этот адрес уже занят: ${taken.name}` })
+    }
+
+    // Код участника должен быть свободен: по нему на человека ссылаются
+    // в запросах и фильтрах.
+    const base = codeFrom(body.name)
+    let code = base
+    for (let n = 2; n < 100; n += 1) {
+      if (!(await prisma.user.findUnique({ where: { code } }))) break
+      code = `${base}${n}`
+    }
+
+    const palette = AVATAR_PALETTE[(await prisma.user.count()) % AVATAR_PALETTE.length]
+
+    const user = await prisma.user.create({
+      data: {
+        email: body.email,
+        passwordHash: await hashPassword(body.password),
+        name: body.name,
+        initials: initialsFrom(body.name),
+        code,
+        role: body.role,
+        jobTitle: body.jobTitle ?? '',
+        avatarBg: palette.bg,
+        avatarFg: palette.fg,
+      },
+    })
+
+    emitChanges(['people'])
+    return reply.code(201).send(personDto(user))
   })
 
   /**

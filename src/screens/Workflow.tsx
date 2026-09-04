@@ -1164,7 +1164,7 @@ function BoardTab({ manage }: { manage: boolean }) {
 /* ── Участники ────────────────────────────────────────────────────────── */
 
 function PeopleTab() {
-  const { list, can, me } = useSession()
+  const { list, can, me, org } = useSession()
   const { toast, toastError } = useApp()
   const manage = can('people.manage')
   const invites = useInvites(manage)
@@ -1180,6 +1180,47 @@ function PeopleTab() {
     (body) => api.post('/api/invites', body),
     ['invites'],
   )
+
+  /*
+   * Заведение учётной записи прямо в интерфейсе. Почты в системе нет, а
+   * при закрытой регистрации не работают и приглашения — значит путь
+   * дать человеку доступ должен быть здесь, а не командой на сервере.
+   */
+  const [newName, setNewName] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [addError, setAddError] = useState('')
+  const addPerson = useApiMutation<Record<string, unknown>, { name: string }>(
+    (body) => api.post('/api/people', body),
+    ['people'],
+  )
+
+  /** Пароль, который не стыдно выдать: 12 знаков, без похожих символов. */
+  function suggestPassword() {
+    const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    const bytes = crypto.getRandomValues(new Uint32Array(12))
+    setNewPassword([...bytes].map((n) => alphabet[n % alphabet.length]).join(''))
+  }
+
+  async function createPerson() {
+    setAddError('')
+    if (newName.trim().length < 2) return setAddError('Укажите имя — его видит вся команда')
+    if (!email.trim()) return setAddError('Укажите почту')
+    if (newPassword.length < 8) return setAddError('Пароль короче восьми символов')
+    try {
+      const created = await addPerson.mutateAsync({
+        email: email.trim(),
+        name: newName.trim(),
+        password: newPassword,
+        role,
+      })
+      toast('Учётная запись создана', `${created.name} — передайте пароль лично`, 'ok')
+      setEmail('')
+      setNewName('')
+      setNewPassword('')
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Не удалось создать')
+    }
+  }
   const dropInvite = useApiMutation<string, unknown>((id) => api.del(`/api/invites/${id}`), ['invites'])
 
   /*
@@ -1273,8 +1314,94 @@ function PeopleTab() {
 
       {manage && (
         <section className="card card--pad">
+          <div className="card__title" style={{ marginBottom: 4 }}>
+            Добавить участника
+          </div>
+          <p className="report__hint" style={{ margin: '0 0 12px' }}>
+            Учётная запись заводится сразу: человек входит по этой почте и паролю.
+            Пароль передайте лично — писем трекер не отправляет.
+          </p>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label className="label" style={{ flex: 1, minWidth: 170 }}>
+              <span>Имя и фамилия</span>
+              <input
+                className="input"
+                value={newName}
+                onChange={(e) => {
+                  setNewName(e.target.value)
+                  setAddError('')
+                }}
+                placeholder="Максим Капранов"
+              />
+            </label>
+            <label className="label" style={{ flex: 1, minWidth: 190 }}>
+              <span>Почта</span>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  setAddError('')
+                }}
+                placeholder="name@company.ru"
+              />
+            </label>
+            <label className="label" style={{ flex: 1, minWidth: 190 }}>
+              <span>Пароль</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  className="input"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value)
+                    setAddError('')
+                  }}
+                  placeholder="не короче восьми знаков"
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <Tooltip label="Придумать пароль" hint="12 знаков без похожих символов">
+                  <button type="button" className="btn btn--secondary" onClick={suggestPassword}>
+                    <Icon name="casino" size={16} />
+                  </button>
+                </Tooltip>
+              </div>
+            </label>
+            <label className="label" style={{ width: 150 }}>
+              <span>Роль</span>
+              <select className="select" value={role} onChange={(e) => setRole(e.target.value as AccessRole)}>
+                {(['admin', 'manager', 'member', 'viewer'] as AccessRole[]).map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={addPerson.isPending}
+              onClick={() => void createPerson()}
+            >
+              {addPerson.isPending ? 'Создаю…' : 'Создать'}
+            </button>
+          </div>
+
+          {addError && (
+            <div className="form__error" style={{ marginTop: 10 }}>
+              <Icon name="error" size={15} />
+              {addError}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Приглашения работают только там, где регистрация открыта. */}
+      {manage && !org.registrationClosed && (
+        <section className="card card--pad">
           <div className="card__title" style={{ marginBottom: 10 }}>
-            Пригласить участника
+            Или пригласить ссылкой
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
