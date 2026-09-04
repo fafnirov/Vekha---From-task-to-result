@@ -39,6 +39,35 @@ cd "$APP_DIR"
 
 BEFORE=$(git rev-parse --short HEAD)
 
+
+step "Обновление кода"
+#
+# Резолвер на этой машине отвечает через раз: git pull падает на
+# «Could not resolve host: github.com», хотя следом та же команда
+# проходит. Пробуем несколько раз, прежде чем сдаться, — иначе выкатка
+# срывается на ровном месте.
+#
+PULLED=no
+for attempt in 1 2 3 4 5; do
+  if git pull --ff-only; then
+    PULLED=yes
+    break
+  fi
+  echo "попытка $attempt не удалась, жду 5 с"
+  sleep 5
+done
+[ "$PULLED" = yes ] || fail "не удалось получить код из репозитория за 5 попыток"
+
+AFTER=$(git rev-parse --short HEAD)
+if [ "$BEFORE" = "$AFTER" ]; then
+  echo "новых коммитов нет ($AFTER) — пересобираю на всякий случай"
+else
+  echo "$BEFORE -> $AFTER"
+fi
+
+step "Зависимости"
+npm install --no-audit --no-fund
+
 step "Копия базы"
 DB_FILE=$(ls prisma/*.db 2>/dev/null | head -1 || true)
 if [ -n "$DB_FILE" ]; then
@@ -55,19 +84,6 @@ if [ -n "$DB_FILE" ]; then
 else
   echo "файл базы не найден — пропускаю"
 fi
-
-step "Обновление кода"
-git fetch --quiet origin
-git pull --ff-only
-AFTER=$(git rev-parse --short HEAD)
-if [ "$BEFORE" = "$AFTER" ]; then
-  echo "новых коммитов нет ($AFTER) — пересобираю на всякий случай"
-else
-  echo "$BEFORE -> $AFTER"
-fi
-
-step "Зависимости"
-npm install --no-audit --no-fund
 
 step "База и клиент Prisma"
 npm run db:deploy
