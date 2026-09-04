@@ -6,8 +6,6 @@
 
 import type { Prisma } from '@prisma/client'
 import {
-  ACCESS_LABEL,
-  ACCESS_STYLE,
   LINK_INVERSE_LABEL,
   LINK_LABEL,
   PRIORITY_LABEL,
@@ -193,12 +191,12 @@ export type QueueRow = Prisma.QueueGetPayload<{
   include: {
     owner: { select: { code: true } }
     workflow: { select: { id: true; name: true } }
+    teams: { select: { id: true; name: true; abbr: true; bg: true; fg: true } }
     _count: { select: { tasks: true } }
   }
 }>
 
 export function queueDto(q: QueueRow) {
-  const style = ACCESS_STYLE[q.access] ?? ACCESS_STYLE.team
   return {
     id: q.id,
     key: q.key,
@@ -210,10 +208,13 @@ export function queueDto(q: QueueRow) {
     counter: q.counter,
     wf: q.workflow.name,
     workflowId: q.workflowId,
-    access: ACCESS_LABEL[q.access] ?? q.access,
-    accessKey: q.access,
-    accBg: style.bg,
-    accFg: style.fg,
+    /*
+     * Команды, которым открыта очередь. Пустой список означает, что её
+     * видят только администраторы и лиды: доступ выдаётся явно, а не
+     * подразумевается.
+     */
+    teams: q.teams.map((t) => ({ id: t.id, name: t.name, abbr: t.abbr, bg: t.bg, fg: t.fg })),
+    open: q.teams.length > 0,
   }
 }
 

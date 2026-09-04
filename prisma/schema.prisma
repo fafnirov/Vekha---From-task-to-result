@@ -124,14 +124,14 @@ model Queue {
   name       String
   ownerId    String
   workflowId String
-  /// team | company | restricted | private
-  access     String   @default("team")
   /// Счётчик для генерации ключей вида VEKHA-142.
   counter    Int      @default(0)
   createdAt  DateTime @default(now())
 
   owner     User             @relation("QueueOwner", fields: [ownerId], references: [id])
   workflow  Workflow         @relation(fields: [workflowId], references: [id])
+  /// Команды, которым открыта очередь. Пусто — видят только админы и лиды.
+  teams     Team[]
   tasks     Task[]
   projects  Project[]
   sprints   Sprint[]
@@ -448,6 +448,7 @@ model Team {
 
   members TeamMember[]
   tasks   Task[]
+  queues  Queue[]
 }
 
 model TeamMember {

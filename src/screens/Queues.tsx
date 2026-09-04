@@ -2,19 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon } from '../components/ui'
 import { api } from '../api/client'
-import { useApiMutation, useQueues, useWorkflows } from '../api/hooks'
+import { useApiMutation, useQueues, useTeams, useWorkflows } from '../api/hooks'
 import { useSession } from '../store/session'
 import { useApp } from '../store/app'
 import type { Queue } from '../data/types'
 
 const GRID = '74px minmax(0,1fr) 150px 92px 128px 118px 30px'
-
-const ACCESS_OPTIONS = [
-  { key: 'company', label: 'вся компания' },
-  { key: 'team', label: 'команда' },
-  { key: 'restricted', label: 'ограничен' },
-  { key: 'private', label: 'закрытый' },
-]
 
 export function Queues() {
   const nav = useNavigate()
@@ -102,9 +95,28 @@ export function Queues() {
               {q.n}
             </span>
             <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{q.wf}</span>
-            <span className="badge" style={{ background: q.accBg, color: q.accFg, height: 20 }}>
-              {q.access}
-            </span>
+            {q.teams.length === 0 ? (
+              <span
+                className="badge"
+                style={{ background: 'var(--n-bg)', color: 'var(--tx3)', height: 20 }}
+                title="Доступ никому не выдан: очередь видят только админы и лиды"
+              >
+                только админы
+              </span>
+            ) : (
+              <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {q.teams.map((t) => (
+                  <span
+                    key={t.id}
+                    className="badge"
+                    style={{ background: t.bg, color: t.fg, height: 20 }}
+                    title={`Очередь открыта команде «${t.name}»`}
+                  >
+                    {t.name}
+                  </span>
+                ))}
+              </span>
+            )}
             {can('workflow.manage') ? (
               <button
                 type="button"
@@ -184,7 +196,8 @@ function QueueDialog({
   const [name, setName] = useState(queue?.name ?? '')
   const [owner, setOwner] = useState(queue?.owner ?? people[0]?.code ?? '')
   const [workflow, setWorkflow] = useState(queue?.wf ?? workflows[0] ?? '')
-  const [access, setAccess] = useState(queue?.accessKey ?? 'team')
+  const [teamIds, setTeamIds] = useState<string[]>(queue?.teams.map((t) => t.id) ?? [])
+  const teams = useTeams()
 
   return (
     <div className="scrim" onClick={onClose}>
@@ -257,16 +270,42 @@ function QueueDialog({
                 ))}
               </select>
             </label>
-            <label className="label">
-              <span>Доступ</span>
-              <select className="select" value={access} onChange={(e) => setAccess(e.target.value)}>
-                {ACCESS_OPTIONS.map((a) => (
-                  <option key={a.key} value={a.key}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          </div>
+
+          {/*
+            Доступ выдаётся командам поимённо. Прежний выпадающий список
+            уровней врал: уровень «команда» означал «любой, кто вошёл»,
+            и участники видели все очереди подряд.
+          */}
+          <div className="label">
+            <span>Кому открыта очередь</span>
+            <div className="queue__teams">
+              {(teams.data ?? []).length === 0 ? (
+                <span style={{ fontSize: 12, color: 'var(--tx3)' }}>
+                  Команд пока нет — заведите их в разделе «Команды».
+                </span>
+              ) : (
+                (teams.data ?? []).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={teamIds.includes(t.id) ? 'tag tag--outline tag--on' : 'tag tag--outline'}
+                    onClick={() =>
+                      setTeamIds((prev) =>
+                        prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+                      )
+                    }
+                  >
+                    {t.name}
+                  </button>
+                ))
+              )}
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--tx3)' }}>
+              {teamIds.length === 0
+                ? 'Никому не открыта: очередь увидят только администраторы и лиды.'
+                : 'Участники отмеченных команд видят эту очередь и её задачи.'}
+            </span>
           </div>
 
           {!queue && (
@@ -289,7 +328,7 @@ function QueueDialog({
             type="button"
             className="btn btn--primary btn--lg"
             disabled={busy}
-            onClick={() => onSave({ key, name, owner, workflow, access })}
+            onClick={() => onSave({ key, name, owner, workflow, teams: teamIds })}
           >
             {queue ? 'Сохранить' : 'Создать'}
           </button>

@@ -55,15 +55,6 @@ export const PRIORITY_ORDER: Record<Priority, number> = {
 export const STATUS_CATEGORIES = ['todo', 'inprogress', 'done', 'blocked'] as const
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
 
-export const QUEUE_ACCESS = ['company', 'team', 'restricted', 'private'] as const
-
-export const ACCESS_LABEL: Record<string, string> = {
-  company: 'вся компания',
-  team: 'команда',
-  restricted: 'ограничен',
-  private: 'закрытый',
-}
-
 export const PROJECT_STATES = ['planned', 'active', 'risk', 'release', 'done'] as const
 
 export const PROJECT_STATE_LABEL: Record<string, string> = {
@@ -141,13 +132,6 @@ export const PROJECT_PALETTE = [
   { bg: 'var(--ok-bg)', fg: 'var(--ok)' },
   { bg: 'var(--n-bg)', fg: 'var(--tx2)' },
 ]
-
-export const ACCESS_STYLE: Record<string, { bg: string; fg: string }> = {
-  company: { bg: 'var(--ok-bg)', fg: 'var(--ok)' },
-  team: { bg: 'var(--ac-soft)', fg: 'var(--ac-tx)' },
-  restricted: { bg: 'var(--warn-bg)', fg: 'var(--warn)' },
-  private: { bg: 'var(--dang-bg)', fg: 'var(--dang)' },
-}
 
 export const PROJECT_STATE_STYLE: Record<string, { bg: string; fg: string }> = {
   planned: { bg: 'var(--n-bg)', fg: 'var(--tx2)' },

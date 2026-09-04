@@ -124,7 +124,13 @@ export async function boardRoutes(app: FastifyInstance): Promise<void> {
       where: { key: parsed.data.key.toUpperCase() },
       include: {
         status: true,
-        queue: { select: { workflowId: true, access: true, ownerId: true } },
+        queue: {
+          select: {
+            workflowId: true,
+            ownerId: true,
+            teams: { select: { members: { select: { userId: true } } } },
+          },
+        },
         watchers: { select: { userId: true } },
         team: { select: { members: { select: { userId: true } } } },
       },

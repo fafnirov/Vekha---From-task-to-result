@@ -1,32 +1,47 @@
 /**
- * Видимость очередей.
+ * Кто что видит.
  *
- * Уровень доступа очереди раньше только рисовался бейджем и ни на что не
- * влиял: задачи «закрытой» очереди отдавались любому вошедшему. Здесь
- * собрано одно правило, которое подмешивается во все выборки задач.
+ * Правило одно: очередь открывается командам, и решает это администратор
+ * в её настройках.
  *
- *   company, team — видят все участники организации
- *   restricted    — админы, лиды и владелец очереди
- *   private       — только админы и владелец очереди
+ *   Админ           — все очереди, он же и настраивает доступ.
+ *   Лид             — все очереди организации: он координирует работу.
+ *   Участник, гость — только очереди тех команд, в которых состоят.
+ *
+ * Прежние уровни доступа убраны: они врали. Уровень с названием
+ * «команда» на деле означал «любой, кто вошёл», и участник видел все
+ * очереди подряд — ровно на это и пожаловался владелец.
+ *
+ * Поверх этого действует сквозное правило: своя работа видна всегда.
+ * Задача, назначенная человеку, остаётся ему видна, даже если очередь
+ * ему не открыта, — иначе поручение молча теряло бы задачу.
  */
 
 import type { Prisma } from '@prisma/client'
 import type { SessionUser } from './auth.js'
 
-/** Уровни, открытые всем вошедшим. */
-const OPEN = ['company', 'team']
+/** Роли, которым открыты все очереди без всякой настройки. */
+function seesEveryQueue(user: SessionUser): boolean {
+  return user.role === 'admin' || user.role === 'manager'
+}
 
-/** Уровни, доступные лидам. */
-const MANAGER = [...OPEN, 'restricted']
+/** Очереди, открытые командам этого человека, плюс его собственные. */
+function reachableQueue(user: SessionUser): Prisma.QueueWhereInput {
+  return {
+    OR: [
+      { teams: { some: { members: { some: { userId: user.id } } } } },
+      // Владелец очереди видит её всегда: он за неё и отвечает.
+      { ownerId: user.id },
+    ],
+  }
+}
 
 /**
- * Условие видимости для запросов по задачам. Для админа пусто —
- * ему доступно всё, и лишний фильтр только мешал бы планировщику.
+ * Условие видимости для запросов по задачам. Для админа и лида пусто —
+ * им доступно всё, и лишний фильтр только мешал бы планировщику.
  */
 export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
-  if (user.role === 'admin') return {}
-
-  const allowed = user.role === 'manager' ? MANAGER : OPEN
+  if (seesEveryQueue(user)) return {}
 
   return {
     OR: [
@@ -43,27 +58,17 @@ export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
       { assigneeId: user.id },
       { authorId: user.id },
       { watchers: { some: { userId: user.id } } },
+      { team: { members: { some: { userId: user.id } } } },
 
       /*
-       * Всё прочее — если очередь открыта И задача не отдана чужой
-       * команде. Команда сужает видимость внутри очереди: поручённое
-       * команде видит она, а не все, кому очередь доступна.
+       * Всё прочее — если очередь открыта его команде И задача не отдана
+       * чужой команде. Команда сужает видимость внутри очереди:
+       * поручённое команде видит она, а не все, кому очередь доступна.
        */
       {
         AND: [
-          {
-            OR: [
-              { queue: { access: { in: allowed } } },
-              // Владелец видит свою очередь независимо от уровня доступа.
-              { queue: { ownerId: user.id } },
-            ],
-          },
-          {
-            OR: [
-              { teamId: null },
-              { team: { members: { some: { userId: user.id } } } },
-            ],
-          },
+          { queue: reachableQueue(user) },
+          { OR: [{ teamId: null }, { team: { members: { some: { userId: user.id } } } }] },
         ],
       },
     ],
@@ -73,26 +78,26 @@ export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
 /** Та же логика для одной очереди — для проверок перед изменением. */
 export function canSeeQueue(
   user: SessionUser,
-  queue: { access: string; ownerId: string },
+  queue: { ownerId: string; teams?: { members: { userId: string }[] }[] },
 ): boolean {
-  if (user.role === 'admin') return true
+  if (seesEveryQueue(user)) return true
   if (queue.ownerId === user.id) return true
-  const allowed = user.role === 'manager' ? MANAGER : OPEN
-  return allowed.includes(queue.access)
+  return (queue.teams ?? []).some((t) => t.members.some((m) => m.userId === user.id))
 }
 
 /**
  * Видна ли человеку конкретная задача.
  *
  * Повторяет правило taskScope для одной уже загруженной записи: либо
- * очередь ему открыта, либо задача его собственная. Проверка по одной
- * очереди этого не учитывала, и назначенная задача, найденная в списке,
- * отвечала «не найдена» при открытии.
+ * задача его собственная, либо очередь открыта его команде и задача не
+ * отдана чужой. Проверка по одной очереди этого не учитывала, и
+ * назначенная задача, найденная в списке, отвечала «не найдена» при
+ * открытии.
  */
 export function canSeeTask(
   user: SessionUser,
   task: {
-    queue: { access: string; ownerId: string }
+    queue: { ownerId: string; teams?: { members: { userId: string }[] }[] }
     assigneeId?: string | null
     authorId?: string
     watchers?: { userId: string }[]
@@ -104,22 +109,20 @@ export function canSeeTask(
   if (task.assigneeId === user.id) return true
   if (task.authorId === user.id) return true
   if ((task.watchers ?? []).some((w) => w.userId === user.id)) return true
+  if ((task.team?.members ?? []).some((m) => m.userId === user.id)) return true
 
-  if (user.role === 'admin') return true
+  if (seesEveryQueue(user)) return true
   if (!canSeeQueue(user, task.queue)) return false
 
   // Задача, поручённая команде, видна только её участникам.
-  if (task.teamId) {
-    return (task.team?.members ?? []).some((m) => m.userId === user.id)
-  }
+  if (task.teamId) return false
   return true
 }
 
 /** Условие видимости для выборок по очередям. */
 export function queueScope(user: SessionUser): Prisma.QueueWhereInput {
-  if (user.role === 'admin') return {}
-  const allowed = user.role === 'manager' ? MANAGER : OPEN
-  return { OR: [{ access: { in: allowed } }, { ownerId: user.id }] }
+  if (seesEveryQueue(user)) return {}
+  return reachableQueue(user)
 }
 
 /**
@@ -132,13 +135,8 @@ export function queueScope(user: SessionUser): Prisma.QueueWhereInput {
 export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
   if (user.role === 'admin') return {}
 
-  const allowed = user.role === 'manager' ? MANAGER : OPEN
-  const inVisibleQueue: Prisma.ProjectWhereInput = {
-    OR: [{ queue: { access: { in: allowed } } }, { queue: { ownerId: user.id } }],
-  }
-
-  // Лид координирует работу, поэтому видит все проекты доступных очередей.
-  if (user.role === 'manager') return inVisibleQueue
+  // Лид координирует работу, поэтому видит все проекты организации.
+  if (user.role === 'manager') return {}
 
   /*
    * Участник и гость видят только те проекты, к которым причастны:
@@ -148,12 +146,13 @@ export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
    */
   return {
     AND: [
-      inVisibleQueue,
+      { queue: reachableQueue(user) },
       {
         OR: [
           { leadId: user.id },
           { tasks: { some: { assigneeId: user.id } } },
           { tasks: { some: { authorId: user.id } } },
+          { tasks: { some: { team: { members: { some: { userId: user.id } } } } } },
         ],
       },
     ],
@@ -161,7 +160,7 @@ export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
 }
 
 /**
- * Условие поиска задачи по ключу с учётом видимости очереди.
+ * Условие поиска задачи по ключу с учётом видимости.
  *
  * Проверка доступа встроена в сам запрос, поэтому её нельзя забыть на
  * очередном подмаршруте: комментарии, историю и вложения закрытой очереди

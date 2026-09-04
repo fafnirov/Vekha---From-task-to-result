@@ -531,3 +531,11 @@
     display: none;
   }
 }
+
+/* Отметки команд в настройках очереди: перенос по строкам, ровный шаг. */
+.queue__teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}

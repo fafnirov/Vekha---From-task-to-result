@@ -8,13 +8,14 @@ import { randomBytes } from 'node:crypto'
 import { clearFailures } from '../lib/throttle.js'
 import { personDto, queueDto } from '../lib/dto.js'
 import { emitChanges } from '../lib/events.js'
-import { AVATAR_PALETTE, QUEUE_ACCESS, ROLES } from '../lib/constants.js'
+import { AVATAR_PALETTE, ROLES } from '../lib/constants.js'
 import { codeFrom, initialsFrom } from '../lib/format.js'
 import { queueScope } from '../lib/access.js'
 
 const queueInclude = {
   owner: { select: { code: true } },
   workflow: { select: { id: true, name: true } },
+  teams: { select: { id: true, name: true, abbr: true, bg: true, fg: true } },
   _count: { select: { tasks: true } },
 } as const
 
@@ -256,7 +257,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       name: z.string().trim().min(2, 'Укажите название'),
       owner: z.string().trim().min(1, 'Выберите владельца'),
       workflow: z.string().trim().min(1, 'Выберите схему'),
-      access: z.enum(QUEUE_ACCESS).default('team'),
+      /* Команды, которым открыта очередь. Пусто — видят только
+         администраторы и лиды. */
+      teams: z.array(z.string()).default([]),
     })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) {
@@ -280,7 +283,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         name: body.name,
         ownerId: owner.id,
         workflowId: workflow.id,
-        access: body.access,
+        teams: { connect: body.teams.map((id) => ({ id })) },
       },
       include: queueInclude,
     })
@@ -297,7 +300,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       name: z.string().trim().min(2).optional(),
       owner: z.string().optional(),
       workflow: z.string().optional(),
-      access: z.enum(QUEUE_ACCESS).optional(),
+      teams: z.array(z.string()).optional(),
     })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Некорректные данные' })
@@ -317,7 +320,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       where: { id },
       data: {
         ...(parsed.data.name ? { name: parsed.data.name } : {}),
-        ...(parsed.data.access ? { access: parsed.data.access } : {}),
+        ...(parsed.data.teams
+          ? { teams: { set: parsed.data.teams.map((id) => ({ id })) } }
+          : {}),
         ...(owner ? { ownerId: owner.id } : {}),
         ...(workflow ? { workflowId: workflow.id } : {}),
       },

@@ -228,7 +228,13 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       where: { key: key.toUpperCase() },
       include: {
         ...taskInclude,
-        queue: { select: { key: true, access: true, ownerId: true } },
+        queue: {
+          select: {
+            key: true,
+            ownerId: true,
+            teams: { select: { members: { select: { userId: true } } } },
+          },
+        },
         subtasks: { include: taskInclude, orderBy: { num: 'asc' } },
         watchers: { include: { user: { select: { id: true, code: true, name: true } } } },
         linksOut: { include: { to: { include: taskInclude } } },
@@ -817,7 +823,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const task = await prisma.task.findUnique({
       where: { key: key.toUpperCase() },
       include: {
-        queue: { select: { access: true, ownerId: true } },
+        queue: {
+          select: {
+            ownerId: true,
+            teams: { select: { members: { select: { userId: true } } } },
+          },
+        },
         watchers: { select: { userId: true } },
         team: { select: { members: { select: { userId: true } } } },
       },

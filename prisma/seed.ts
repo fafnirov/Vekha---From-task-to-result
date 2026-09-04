@@ -474,7 +474,6 @@ async function main() {
         name: q.name,
         ownerId: userId(q.owner)!,
         workflowId: workflow.id,
-        access: q.access,
         createdAt: day(-115),
       },
     })

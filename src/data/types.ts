@@ -194,10 +194,9 @@ export interface Queue {
   counter: number
   wf: string
   workflowId: string
-  access: string
-  accessKey: string
-  accBg: string
-  accFg: string
+  /** Команды, которым открыта очередь. Пусто — только админы и лиды. */
+  teams: { id: string; name: string; abbr: string; bg: string; fg: string }[]
+  open: boolean
 }
 
 export interface Project {
