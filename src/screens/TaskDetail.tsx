@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Avatar, Empty, Executor, Icon, PriorityChip, Progress, StatusBadge, Tag, TaskKey, UnderlineTabs } from '../components/ui'
+import { Avatar, Empty, Icon, PriorityChip, Progress, StatusBadge, Tag, TaskKey, UnderlineTabs } from '../components/ui'
 import { PRIORITY_KEY, PRIORITY_NAMES, dueColor, fileSize } from '../data/catalog'
 import { Checklist } from '../components/Checklist'
+import { ExecutorSelect } from '../components/ExecutorSelect'
 import { Tooltip } from '../components/Tooltip'
 import { Worklog } from '../components/Worklog'
 import { ResolutionDialog, type ResolutionOption } from '../components/ResolutionDialog'
@@ -14,7 +15,6 @@ import {
   useHistory,
   useInvalidate,
   useProjects,
-  useTeams,
   useSprints,
   useTask,
   useTaskTypes,
@@ -43,7 +43,6 @@ export function TaskDetail() {
   const comments = useComments(key)
   const history = useHistory(key)
   const projects = useProjects()
-  const teams = useTeams()
   const sprints = useSprints()
   const taskTypes = useTaskTypes()
   const update = useUpdateTask()
@@ -712,55 +711,16 @@ export function TaskDetail() {
           </div>
 
           <Field label="Исполнитель">
-            <div className="select-with-avatar">
-              <Executor
-                who={task.who}
-                team={task.team}
-                teamAbbr={task.teamAbbr}
-                teamBg={task.teamBg}
-                teamFg={task.teamFg}
-                size="xs"
-              />
-              {/*
-                Человек или команда — исполнитель один. Список общий,
-                разделён на группы; выбор одного снимает другого.
-              */}
-              <select
-                className="select"
-                value={task.teamId ? `team:${task.team}` : task.who ? `user:${task.who}` : ''}
-                disabled={!editable}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v.startsWith('team:')) {
-                    void patch({ team: v.slice(5) }, 'Задача поручена команде')
-                  } else if (v.startsWith('user:')) {
-                    void patch({ assignee: v.slice(5) }, 'Исполнитель изменён')
-                  } else {
-                    void patch({ assignee: null, team: null }, 'Исполнитель снят')
-                  }
-                }}
-              >
-                <option value="">Не назначен</option>
-                <optgroup label="Люди">
-                  {people
-                    .filter((p) => p.active)
-                    .map((p) => (
-                      <option key={p.id} value={`user:${p.code}`}>
-                        {p.name}
-                      </option>
-                    ))}
-                </optgroup>
-                {(teams.data ?? []).length > 0 && (
-                  <optgroup label="Команды">
-                    {(teams.data ?? []).map((t) => (
-                      <option key={t.id} value={`team:${t.name}`}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
+            <ExecutorSelect
+              assignee={task.who}
+              team={task.teamId ? task.team : null}
+              disabled={!editable}
+              onPick={(pick) => {
+                if (pick.team) void patch({ team: pick.team }, 'Задача поручена команде')
+                else if (pick.assignee) void patch({ assignee: pick.assignee }, 'Исполнитель изменён')
+                else void patch({ assignee: null, team: null }, 'Исполнитель снят')
+              }}
+            />
           </Field>
 
           <Field label="Тип">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Checkbox, Executor, Icon } from './ui'
+import { Checkbox, Icon } from './ui'
+import { ExecutorSelect } from './ExecutorSelect'
 import { NoQueues } from './NoQueues'
 import { PRIORITY_KEY, PRIORITY_NAMES } from '../data/catalog'
 import {
@@ -8,7 +9,6 @@ import {
   useFields,
   useProjects,
   useQueues,
-  useTeams,
   useSprints,
   useTaskTypes,
   useTemplates,
@@ -23,14 +23,13 @@ export function CreateTaskModal() {
   const ui = useUi()
   const nav = useNavigate()
   const { toast, toastError } = useApp()
-  const { list: people, me } = useSession()
+  const { me } = useSession()
 
   const queues = useQueues()
   const projects = useProjects()
   const sprints = useSprints()
   const templates = useTemplates()
   const taskTypes = useTaskTypes()
-  const teams = useTeams()
   const create = useCreateTask()
   const fields = useFields()
 
@@ -256,43 +255,14 @@ export function CreateTaskModal() {
           <div className="grid-3">
             <label className="label">
               <span>Исполнитель{star('assignee')}</span>
-              <div className="select-with-avatar">
-                <Executor who={assignee || null} team={team || null} size="xs" />
-                {/*
-                  Исполнитель бывает двух видов, но он один: список общий,
-                  разделён на группы. Выбор команды снимает человека и
-                  наоборот — иначе непонятно, с кого спрашивать.
-                */}
-                <select
-                  className="select"
-                  value={team ? `team:${team}` : assignee ? `user:${assignee}` : ''}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setAssignee(v.startsWith('user:') ? v.slice(5) : '')
-                    setTeam(v.startsWith('team:') ? v.slice(5) : '')
-                  }}
-                >
-                  <option value="">Не назначен</option>
-                  <optgroup label="Люди">
-                    {people
-                      .filter((p) => p.active)
-                      .map((p) => (
-                        <option key={p.id} value={`user:${p.code}`}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                  {(teams.data ?? []).length > 0 && (
-                    <optgroup label="Команды">
-                      {(teams.data ?? []).map((t) => (
-                        <option key={t.id} value={`team:${t.name}`}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
+              <ExecutorSelect
+                assignee={assignee || null}
+                team={team || null}
+                onPick={(pick) => {
+                  setAssignee(pick.assignee ?? '')
+                  setTeam(pick.team ?? '')
+                }}
+              />
             </label>
             <label className="label">
               <span>Приоритет</span>
