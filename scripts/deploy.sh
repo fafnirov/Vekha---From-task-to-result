@@ -21,6 +21,11 @@
 
 set -euo pipefail
 
+# --no-pull: код уже доставлен другим способом (например, git-свёртком по
+# SSH, когда на машине не работает разрешение имён). Остальные шаги те же.
+SKIP_PULL=no
+[ "${1:-}" = "--no-pull" ] && SKIP_PULL=yes
+
 APP_DIR=/opt/vekha/app
 BACKUP_DIR=/opt/vekha/backups
 SERVICE=vekha
@@ -47,16 +52,20 @@ step "Обновление кода"
 # проходит. Пробуем несколько раз, прежде чем сдаться, — иначе выкатка
 # срывается на ровном месте.
 #
-PULLED=no
-for attempt in 1 2 3 4 5; do
-  if git pull --ff-only; then
-    PULLED=yes
-    break
-  fi
-  echo "попытка $attempt не удалась, жду 5 с"
-  sleep 5
-done
-[ "$PULLED" = yes ] || fail "не удалось получить код из репозитория за 5 попыток"
+if [ "$SKIP_PULL" = yes ]; then
+  echo "пропускаю: код доставлен отдельно"
+else
+  PULLED=no
+  for attempt in 1 2 3 4 5; do
+    if git pull --ff-only; then
+      PULLED=yes
+      break
+    fi
+    echo "попытка $attempt не удалась, жду 5 с"
+    sleep 5
+  done
+  [ "$PULLED" = yes ] || fail "не удалось получить код из репозитория за 5 попыток"
+fi
 
 AFTER=$(git rev-parse --short HEAD)
 if [ "$BEFORE" = "$AFTER" ]; then
