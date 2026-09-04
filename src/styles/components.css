@@ -134,9 +134,20 @@
   font-size: 13px;
 }
 
+/*
+ * Разрушающее действие обязано выглядеть разрушающим сразу, а не только
+ * под курсором: раньше «Удалить» была неотличима от обычной подписи.
+ */
+.btn--danger {
+  color: var(--dang);
+  border: 1px solid color-mix(in oklch, var(--dang) 35%, transparent);
+  background: transparent;
+}
+
 .btn--danger:hover:not(:disabled) {
   background: var(--dang-bg);
   color: var(--dang);
+  border-color: var(--dang);
 }
 
 /* Segmented control ---------------------------------------------- */
@@ -447,6 +458,19 @@ a.tag:hover {
 .input:focus {
   border-color: var(--ac);
   box-shadow: var(--ring);
+}
+
+/*
+ * Заблокированное поле должно быть видно заблокированным: раньше «Ключ
+ * задач» при правке очереди выглядел точно как соседнее редактируемое
+ * «Название» — люди кликали и печатали в пустоту.
+ */
+.input:disabled,
+.select:disabled,
+.textarea:disabled {
+  background: var(--sunken);
+  color: var(--tx3);
+  cursor: not-allowed;
 }
 
 .input--error {

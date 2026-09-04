@@ -104,6 +104,9 @@ export function Filters() {
         <div className="vk-eyebrow" style={{ padding: '4px 4px 8px' }}>
           Избранные
         </div>
+        {!library.isLoading && (library.data?.favorites ?? []).length === 0 && (
+          <div className="home__none">Пока ничего. Звёздочка у фильтра добавит его сюда.</div>
+        )}
         {(library.data?.favorites ?? []).map((f) => (
           <FilterItem
             key={f.id}

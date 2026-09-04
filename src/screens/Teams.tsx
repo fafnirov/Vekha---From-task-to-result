@@ -103,7 +103,13 @@ export function Teams() {
                 <span className="ellipsis" style={{ fontSize: 12 }}>
                   {m.name}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{m.role}</span>
+                <span
+                  className="ellipsis"
+                  title={m.role}
+                  style={{ fontSize: 11, color: 'var(--tx3)', minWidth: 0 }}
+                >
+                  {m.role}
+                </span>
                 <span
                   className="mono"
                   style={{ fontSize: 11, color: 'var(--tx2)', textAlign: 'right' }}

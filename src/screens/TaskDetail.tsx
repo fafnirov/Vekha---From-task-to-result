@@ -515,7 +515,13 @@ export function TaskDetail() {
               <span className="mono" style={{ fontSize: 11, color: 'var(--tx3)' }}>
                 {fileSize(a.size)}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{a.byName}</span>
+              <span
+                className="ellipsis"
+                title={a.byName}
+                style={{ fontSize: 11, color: 'var(--tx3)', minWidth: 0 }}
+              >
+                {a.byName}
+              </span>
               <button
                 type="button"
                 className="btn btn--icon-quiet"

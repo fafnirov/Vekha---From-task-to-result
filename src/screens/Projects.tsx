@@ -61,7 +61,17 @@ export function Projects() {
         )}
       </div>
 
-      {!projects.isLoading && list.length === 0 && (
+      {/* Неудачная загрузка — это не «проектов нет»: сообщаем о сбое,
+          а не выдумываем за пользователя состояние его данных. */}
+      {projects.isError && (
+        <Empty
+          icon="cloud_off"
+          title="Не удалось загрузить проекты"
+          text="Проверьте связь и обновите страницу."
+        />
+      )}
+
+      {!projects.isLoading && !projects.isError && list.length === 0 && (
         <Empty
           icon="folder_open"
           title="Проектов нет"

@@ -216,8 +216,14 @@ function QueueDialog({
                 onChange={(e) => setKey(e.target.value.toUpperCase())}
                 placeholder="VEKHA"
                 disabled={Boolean(queue)}
+                title={queue ? 'Ключ нельзя изменить: он уже в номерах задач' : undefined}
                 maxLength={10}
               />
+              {queue && (
+                <span style={{ fontSize: 11, color: 'var(--tx3)' }}>
+                  Ключ менять нельзя — он уже стоит в номерах задач
+                </span>
+              )}
             </label>
             <label className="label">
               <span>Название</span>

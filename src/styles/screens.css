@@ -384,21 +384,23 @@
   font-weight: 600;
 }
 
+/*
+ * Обёртка подписи и поля запроса — не поле сама по себе.
+ *
+ * Раньше у неё были собственные рамка, фон и кольцо фокуса, а внутри
+ * стоял .textarea со своими: получалась коробка в коробке одного цвета
+ * и два вложенных акцентных кольца при фокусе.
+ */
 .jql {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface2);
-  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.7;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.jql:focus-within {
-  border-color: var(--ac);
-  box-shadow: var(--ring);
-}
+/* Кольцо фокуса рисует само поле — .textarea:focus. */
 
 .jql .k {
   color: var(--vio);
@@ -421,10 +423,30 @@
   gap: 8px;
 }
 
+/* Вертикального ритма между условиями не было — селекты стояли
+   вплотную, и нижнее приклеивалось к полю запроса. */
+.cond + .cond {
+  margin-top: 8px;
+}
+
+.cond:last-of-type {
+  margin-bottom: 12px;
+}
+
+/*
+ * Переключатель союза. Кнопки внутри размечены как .seg__item, но самой
+ * дорожки .seg у контейнера не было: выбранный вариант выходил белым на
+ * белом, и по какому союзу склеены условия — не видно, хотя от этого
+ * зависит смысл запроса.
+ */
 .cond__join {
+  display: flex;
+  gap: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px;
   font-size: 12px;
-  color: var(--tx3);
-  text-transform: uppercase;
   letter-spacing: 0.03em;
   font-weight: 600;
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Empty, Icon, PriorityChip, Progress, StatusBadge, TaskKey } from '../components/ui'
-import { dueColor, points } from '../data/catalog'
+import { plural, points } from '../data/catalog'
 import { api } from '../api/client'
 import { useApiMutation, usePlanning, useQueues } from '../api/hooks'
 import { useSession } from '../store/session'
@@ -16,7 +16,7 @@ const SPRINT_STATE: Record<string, string> = {
   closed: 'закрыт',
 }
 
-const SPRINT_GRID = '20px 88px minmax(0,1fr) 30px 116px 26px 46px 26px'
+const SPRINT_GRID = '20px 88px minmax(0,1fr) 30px 116px 26px 72px 26px'
 
 export function Backlog() {
   const nav = useNavigate()
@@ -218,7 +218,11 @@ export function Backlog() {
 
           {sprintTasks.length === 0 && (
             <div className="sprint__empty">
-              {overSprint ? 'Отпустите, чтобы добавить задачу' : 'В спринте пока нет задач'}
+              {overSprint
+                ? 'Отпустите, чтобы добавить задачу'
+                : !sprint
+                  ? 'Выберите спринт наверху — или создайте новый'
+                  : 'В спринте пока нет задач'}
             </div>
           )}
 
@@ -335,7 +339,7 @@ export function Backlog() {
           {(summary?.unestimated ?? 0) > 0 && (
             <div className="plan__warn">
               <Icon name="straighten" size={15} color="var(--warn)" />
-              {summary?.unestimated} задач без оценки — план неточен
+              {summary?.unestimated} {plural(summary?.unestimated ?? 0, 'задача', 'задачи', 'задач')} без оценки — план неточен
             </div>
           )}
           {(summary?.unassigned ?? 0) > 0 && (
@@ -440,7 +444,13 @@ function PlanRow({
       <PriorityChip priority={task.priority} small />
       <StatusBadge status={task.status} category={task.statusCategory} small />
       <Avatar id={task.who} size="md" />
-      <span className="mono" style={{ fontSize: 12, color: dueColor(task.dueState), textAlign: 'right' }}>
+      {/* Нейтральный цвет: раньше оценка красилась цветом просроченного
+          срока, и «5 баллов» алым читалось как «с оценкой что-то не так»,
+          хотя колонки со сроком в этой таблице нет вовсе. */}
+      <span
+        className="mono"
+        style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'right', whiteSpace: 'nowrap' }}
+      >
         {task.est ? points(task.est) : '—'}
       </span>
       {action ? (
