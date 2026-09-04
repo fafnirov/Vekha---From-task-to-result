@@ -1,0 +1,54 @@
+# Трекер на общей машине. Соседи — боевой сервис с платящими людьми,
+# поэтому всё ограничено: свой порт только на петле, своя сеть, потолок
+# по памяти и процессам.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vekha-tracker:local
+    container_name: tracker-app
+
+    # Только петля: наружу пускает Caddy, ufw чужие порты и не выпустит.
+    ports:
+      - "127.0.0.1:8093:4180"
+
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "4180"
+      # База и вложения — на подключённом томе, переживают пересборку.
+      DATABASE_URL: "file:/data/tracker.db"
+      UPLOAD_DIR: /data/uploads
+      # Приложение живёт в корне домена, префикс не нужен.
+      BASE_PATH: ""
+      # Самостоятельной регистрации нет: учётки заводит владелец сервера
+      # командой scripts/add-user.mjs.
+      REGISTRATION: closed
+      # Обязателен: без него сервер не поднимется в production.
+      JWT_SECRET: ${JWT_SECRET:?задайте JWT_SECRET в .env рядом с compose.yaml}
+
+    volumes:
+      - ./data:/data
+
+    init: true
+    mem_limit: 512m
+    pids_limit: 200
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4180/api/auth/state >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+    restart: unless-stopped
+
+    # Своя сеть. К deploy_private и сетям remnawave не подключаемся: там
+    # базы боевого сервиса, и трекеру там делать нечего.
+    networks: [tracker]
+
+networks:
+  tracker:
+    name: tracker

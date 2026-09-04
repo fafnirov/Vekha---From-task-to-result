@@ -18,6 +18,19 @@ import { personDto } from '../lib/dto.js'
 import { clearFailures, lockedFor, registerFailure } from '../lib/throttle.js'
 import { emitChange } from '../lib/events.js'
 
+/**
+ * Режим регистрации.
+ *
+ *   invite  — по приглашению (по умолчанию): первый вошедший становится
+ *             админом, остальные заводятся по ссылке-приглашению
+ *   closed  — самостоятельной регистрации нет вовсе, учётки заводит
+ *             владелец сервера командой scripts/add-user.mjs
+ *
+ * Закрытый режим нужен там, где трекер стоит на общей машине и лишний
+ * путь к созданию учётной записи — лишний риск.
+ */
+const REGISTRATION_CLOSED = (process.env.REGISTRATION ?? 'invite').toLowerCase() === 'closed'
+
 const credentials = z.object({
   email: z.string().trim().toLowerCase().email('Некорректный адрес почты'),
   password: z.string().min(8, 'Пароль короче восьми символов'),
@@ -53,11 +66,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const org = await prisma.organization.findFirst()
     return {
       initialized: users > 0,
+      registrationClosed: REGISTRATION_CLOSED,
       org: org ? { name: org.name, unit: org.unit, mark: org.mark } : null,
     }
   })
 
   app.post('/api/auth/register', async (req, reply) => {
+    if (REGISTRATION_CLOSED) {
+      return reply.code(403).send({
+        error: 'Регистрация закрыта. Учётную запись заводит администратор.',
+      })
+    }
+
     const parsed = registration.safeParse(req.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0].message })
@@ -216,6 +236,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/invites', { preHandler: authenticate }, async (req, reply) => {
     if (!(await requirePerm(req, reply, 'people.manage'))) return
+    if (REGISTRATION_CLOSED) {
+      // Выдать ссылку, по которой нельзя зарегистрироваться, — обмануть.
+      return reply.code(409).send({
+        error: 'Регистрация закрыта: приглашение работать не будет. Учётную запись заводит администратор на сервере.',
+      })
+    }
 
     const schema = z.object({
       email: z.string().trim().toLowerCase().email('Некорректный адрес почты'),
